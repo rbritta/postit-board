@@ -17,11 +17,14 @@
  * Drag either bottom corner of the glass to resize the board: it stays centered and the size is
  * saved through `store.saveSize` (the gear can lock it). By default it takes 80% of the width.
  *
+ * Long text ends in "…". Click a note to read it whole in the center of the screen (option
+ * `expand`: 'center', 'inplace' grows it on hover, 'more' adds a link); people pick in the gear.
+ *
  * The board never talks to a server by itself: every change goes through `store`
  * (see `restStore` for the matching HTTP client, and `server/` for the Node side).
  */
 import {
-  DEFAULT_COLORS, SIZE, normalizeSize, autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors,
+  DEFAULT_COLORS, SIZE, EXPAND, normalizeSize, normalizeView, autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors,
   linkify, mergeLegend, normalizeLegend, normalizeNote, refId, refOf, safeUrl, tilt, toLocalInput, withPositions,
 } from './core.js';
 
@@ -65,6 +68,13 @@ export const DEFAULT_STRINGS = Object.freeze({
   locked: 'Set by the app: rename only',
   resize: 'Drag to resize the board · double-click to reset',
   lockSize: 'Lock the board size',
+  expand: 'Long text',
+  expandCenter: 'Click opens the note in the center of the screen',
+  expandInplace: 'The note grows in place on hover',
+  expandMore: 'A "more" link on notes with cut text',
+  more: 'more ▾',
+  less: 'less ▴',
+  close: 'Close',
 });
 
 const DEFAULTS = {
@@ -84,6 +94,8 @@ const DEFAULTS = {
   resizable: true,
   width: SIZE.width,
   size: null,
+  expand: 'center',
+  view: null,
   onError: (err) => console.error('[postit-board]', err),
   now: () => new Date(),
 };
@@ -110,6 +122,7 @@ export function restStore(base, { headers = {}, fetch: doFetch = globalThis.fetc
       ref.key != null ? call('PUT', `/key/${encodeURIComponent(ref.key)}`, patch) : call('PATCH', `/${ref.id}`, patch),
     saveLegend: (legend) => call('PUT', '/legend', { legend }),
     saveSize: (size) => call('PUT', '/size', { size }),
+    saveView: (view) => call('PUT', '/view', { view }),
   };
 }
 
@@ -122,13 +135,19 @@ export function localStore(name = 'postit-board', storage = globalThis.localStor
   return {
     load: () => {
       const d = read();
-      return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions, ...(d.legend ? { legend: d.legend } : {}), ...(d.size ? { size: d.size } : {}) };
+      return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions, ...(d.legend ? { legend: d.legend } : {}), ...(d.size ? { size: d.size } : {}), ...(d.view ? { view: d.view } : {}) };
     },
     saveSize(size) {
       const d = read();
       d.size = normalizeSize(size);
       write(d);
       return { size: d.size };
+    },
+    saveView(view) {
+      const d = read();
+      d.view = normalizeView(view);
+      write(d);
+      return { view: d.view };
     },
     saveLegend(legend) {
       const d = read();
@@ -184,6 +203,11 @@ export function createBoard(root, options = {}) {
   let rawAuto = [];
   let positions = { ...opts.positions };
   let size = normalizeSize(opts.size);
+  let view = normalizeView(opts.view);
+  const expand = () => view.expand || (EXPAND.includes(opts.expand) ? opts.expand : 'center');
+  const opened = new Set(); // notes opened in place (touch, or the "more" link)
+  let readerNote = null;
+  let dragged = false;
   const hidden = new Set();
   let drag = null;
 
@@ -256,8 +280,59 @@ export function createBoard(root, options = {}) {
     glass.style.setProperty('--pb-height', `${boardHeight(list)}px`);
     glass.innerHTML = list.length ? list.map(noteHtml).join('') : `<p class="pb-empty">${escapeHtml(t.empty)}</p>`;
     if (flowing.length && !isGrid()) flow(flowing);
+    markCut();
     fitHeight();
     renderLegend();
+  }
+
+  /** Notes whose title or text is cut get the class pb-note--cut, and a "more" link in that mode. */
+  function markCut() {
+    root.dataset.expand = expand();
+    for (const el of glass.querySelectorAll('.pb-note')) {
+      const ref = el.dataset.ref;
+      if (opened.has(ref)) el.classList.add('pb-note--open');
+      // half a line of slack: handwriting fonts draw a few pixels past their line box
+      const cut = [...el.querySelectorAll('.pb-title, .pb-text')].some((x) => x.scrollHeight - x.clientHeight > (parseFloat(getComputedStyle(x).lineHeight) || 20) / 2);
+      el.classList.toggle('pb-note--cut', cut || opened.has(ref));
+      if (expand() === 'more' && (cut || opened.has(ref))) {
+        el.querySelector('.pb-foot').insertAdjacentHTML('beforebegin',
+          `<button type="button" class="pb-more" data-pb="more" aria-expanded="${opened.has(ref)}">${escapeHtml(opened.has(ref) ? t.less : t.more)}</button>`);
+      }
+    }
+  }
+
+  /** The note read whole, big, in the center of the screen. */
+  function openReader(note) {
+    closeMenu();
+    readerNote = note;
+    const swatch = colors[note.color] || colors.yellow;
+    const link = note.link
+      ? `<a class="pb-link" href="${escapeHtml(note.link)}"${/^https?:/i.test(note.link) ? ' target="_blank" rel="noopener noreferrer"' : ''}>${escapeHtml(note.linkLabel || (note.auto ? t.open : note.link))}</a>`
+      : '';
+    const due = note.due ? `<time class="pb-due pb-due--${dueStatus(note.due, opts.now())}" datetime="${escapeHtml(note.due)}">${escapeHtml(formatDue(note.due, { locale: opts.locale, now: opts.now(), words: t }))}</time>` : '';
+    dialog.classList.add('pb-dialog--reader');
+    dialog.innerHTML = `<article class="pb-reader" style="--pb-note:${escapeHtml(swatch)}">
+      <button type="button" class="pb-reader-close" data-pb="reader-close" aria-label="${escapeHtml(t.close)}">×</button>
+      ${note.title ? `<h2 id="${id}-h" class="pb-reader-title">${escapeHtml(note.title)}</h2>` : ''}
+      ${note.image ? `<img class="pb-reader-img" src="${escapeHtml(note.image)}" alt="">` : ''}
+      ${note.text ? `<p class="pb-reader-text">${linkify(note.text)}</p>` : ''}
+      <div class="pb-reader-foot">${due}<span class="pb-spacer"></span>${link}
+        ${note.auto ? '' : `<button type="button" class="pb-btn" data-pb="reader-edit">${escapeHtml(t.edit)}</button><button type="button" class="pb-btn" data-pb="reader-done">${escapeHtml(t.done)}</button>`}</div>
+    </article>`;
+    dialog.addEventListener('close', () => { dialog.classList.remove('pb-dialog--reader'); readerNote = null; }, { once: true });
+    dialog.showModal();
+    dialog.querySelector('.pb-reader-close').focus();
+  }
+
+  function toggleOpen(el) {
+    const ref = el.dataset.ref;
+    if (opened.has(ref)) opened.delete(ref); else opened.add(ref);
+    const note = find(ref);
+    if (note && opened.has(ref)) { note.z = topZ() + 1; el.style.setProperty('--pb-z', note.z); }
+    el.classList.toggle('pb-note--open', opened.has(ref));
+    const more = el.querySelector('.pb-more');
+    if (more) { more.textContent = opened.has(ref) ? t.less : t.more; more.setAttribute('aria-expanded', String(opened.has(ref))); }
+    fitHeight();
   }
 
   /** How many columns of notes fit: a wide screen gets more of them, never fewer than four. */
@@ -458,6 +533,10 @@ export function createBoard(root, options = {}) {
       <h2 id="${id}-h">${escapeHtml(t.settings)}</h2>
       <p class="pb-settings-hint">${escapeHtml(t.settingsHint)}</p>
       <ol class="pb-types">${opts.legend.map(typeRow).join('')}</ol>
+      <fieldset class="pb-expand"><legend>${escapeHtml(t.expand)}</legend>
+        ${[['center', t.expandCenter], ['inplace', t.expandInplace], ['more', t.expandMore]].map(([v, label]) =>
+          `<label><input type="radio" name="expand" value="${v}"${expand() === v ? ' checked' : ''}> ${escapeHtml(label)}</label>`).join('')}
+      </fieldset>
       ${opts.resizable ? `<label class="pb-lock"><input type="checkbox" name="lockSize"${size.locked ? ' checked' : ''}> ${escapeHtml(t.lockSize)}</label>` : ''}
       <div class="pb-actions">
         <button type="button" class="pb-btn" data-pb="type-add">${escapeHtml(t.addType)}</button>
@@ -501,9 +580,13 @@ export function createBoard(root, options = {}) {
       const lock = form.querySelector('[name=lockSize]');
       const sizeChanged = lock && lock.checked !== size.locked;
       if (sizeChanged) { size = { ...size, locked: lock.checked }; applySize(); }
+      const ex = form.querySelector('[name=expand]:checked')?.value;
+      const viewChanged = ex && ex !== expand();
+      if (viewChanged) { view = normalizeView({ ...view, expand: ex }); opened.clear(); }
       render();
       try { await opts.store?.saveLegend?.(legend); } catch (err) { fail(err); }
       if (sizeChanged) await saveSize();
+      if (viewChanged) { try { await opts.store?.saveView?.(view); } catch (err) { fail(err); } }
     });
     dialog.showModal();
     form.querySelector('[name=label]')?.focus();
@@ -587,8 +670,17 @@ export function createBoard(root, options = {}) {
   /* ---------- events ---------- */
   function onClick(ev) {
     const btn = ev.target.closest('[data-pb]');
-    if (!btn || !root.contains(btn)) return;
+    if (!btn) return onNoteClick(ev);
+    if (!root.contains(btn)) return;
     const action = btn.dataset.pb;
+    if (action.startsWith('reader-')) {
+      const target = readerNote;
+      dialog.close();
+      if (target && action === 'reader-edit') return openEditor(target);
+      if (target && action === 'reader-done') return finish(target);
+      return;
+    }
+    if (action === 'more') return toggleOpen(btn.closest('.pb-note'));
     if (action === 'add') return openEditor(null);
     if (action === 'settings') return openSettings();
     if (action === 'menu-new') {
@@ -622,6 +714,17 @@ export function createBoard(root, options = {}) {
     if (action === 'done') finish(note);
   }
 
+  /** A click on the note itself (not a link, a button or the end of a drag). */
+  function onNoteClick(ev) {
+    if (ev.target === dialog && dialog.classList.contains('pb-dialog--reader')) return dialog.close(); // the backdrop
+    const el = ev.target.closest('.pb-note');
+    if (!el || !glass.contains(el) || ev.target.closest('a,button,input,textarea') || dragged) return;
+    const note = find(el.dataset.ref);
+    if (!note) return;
+    if (expand() === 'center') return openReader(note);
+    if (expand() === 'inplace' && (lastPointer === 'touch' || lastPointer === 'pen')) toggleOpen(el);
+  }
+
   function finish(note) {
     glass.querySelector(`[data-ref="${CSS.escape(refId(refOf(note)))}"]`)?.classList.add('pb-note--leaving');
     notes = notes.filter((n) => n !== note);
@@ -645,13 +748,14 @@ export function createBoard(root, options = {}) {
     el.style.setProperty('--pb-z', note.z);
     el.classList.add('pb-note--dragging');
     el.setPointerCapture?.(ev.pointerId);
-    drag = { el, note, dx: ev.clientX - r.left, dy: ev.clientY - r.top, moved: false };
+    drag = { el, note, dx: ev.clientX - r.left, dy: ev.clientY - r.top, x0: ev.clientX, y0: ev.clientY, moved: false };
   }
 
   function onPointerMove(ev) {
     if (!drag) return;
     const box = glass.getBoundingClientRect();
     const w = drag.el.offsetWidth;
+    if (!drag.moved && Math.hypot(ev.clientX - drag.x0, ev.clientY - drag.y0) < 4) return;
     drag.moved = true;
     drag.note.x = Math.min(Math.max(0, (ev.clientX - box.left - drag.dx) / box.width), Math.max(0, 1 - w / box.width));
     drag.note.y = Math.max(0, Math.round(ev.clientY - box.top - drag.dy));
@@ -663,6 +767,9 @@ export function createBoard(root, options = {}) {
     if (!drag) return;
     const { el, note, moved } = drag;
     drag = null;
+    // the click that ends a drag does not open the note
+    dragged = moved;
+    if (moved) setTimeout(() => { dragged = false; }, 0);
     el.classList.remove('pb-note--dragging');
     fitHeight();
     // the note touched last stays on top, also after a reload
@@ -675,7 +782,7 @@ export function createBoard(root, options = {}) {
     if (!el || ev.target !== el) return;
     const note = find(el.dataset.ref);
     if (!note) return;
-    if (ev.key === 'Enter' && !note.auto) { ev.preventDefault(); return openEditor(note); }
+    if (ev.key === 'Enter') { ev.preventDefault(); return expand() === 'center' ? openReader(note) : note.auto ? toggleOpen(el) : openEditor(note); }
     const step = ev.shiftKey ? 5 : 1;
     const moves = { ArrowLeft: [-0.01, 0], ArrowRight: [0.01, 0], ArrowUp: [0, -10], ArrowDown: [0, 10] };
     const m = moves[ev.key];
@@ -689,6 +796,8 @@ export function createBoard(root, options = {}) {
     keyTimer = setTimeout(() => save(note, { x: note.x, y: note.y }), 400);
   }
 
+  let lastPointer = 'mouse';
+  root.addEventListener('pointerdown', (ev) => { lastPointer = ev.pointerType || 'mouse'; }, true);
   root.addEventListener('click', onClick);
   glass.addEventListener('dblclick', onDblClick);
   glass.addEventListener('pointerdown', onPointerDown);
@@ -739,6 +848,7 @@ export function createBoard(root, options = {}) {
         const data = await opts.store.load();
         if (data.legend) { savedLegend = data.legend; applyLegend(); }
         if (data.size) { size = normalizeSize(data.size); applySize(); }
+        if (data.view) view = normalizeView(data.view);
         setData({ notes: data.notes, positions: data.positions });
         render();
       } catch (err) { fail(err); }
@@ -753,6 +863,10 @@ export function createBoard(root, options = {}) {
     },
     openEditor: (draft) => openEditor(null, draft),
     openSettings: () => openSettings(),
+    /** The view people chose in the gear: `{ expand }` (null = the app default). */
+    get view() { return { ...view }; },
+    /** Open a note big in the center of the screen, as a click does. */
+    openNote: (ref) => { const n = find(typeof ref === 'string' ? ref : refId(ref)); if (n) openReader(n); },
     /** The board size people chose: `{ width, height, locked }` (null = the default). */
     get size() { return { ...size }; },
     /** The legend in use: what the app shipped plus what people changed with the gear. */

@@ -72,7 +72,7 @@ No bundler and no modules? Use the classic build, which defines `window.PostitBo
 
 | Option | Default | What it is |
 | --- | --- | --- |
-| `store` | `null` | Where changes go: `restStore(url)`, `localStore(name)` or your own `{ load, create, update, saveLegend?, saveSize? }`. |
+| `store` | `null` | Where changes go: `restStore(url)`, `localStore(name)` or your own `{ load, create, update, saveLegend?, saveSize?, saveView? }`. |
 | `legend` | `[]` | `[{ color, label, description?, locked?, hex? }]`, in footer order: the note types. `locked` types belong to the app (rename only). `hex` repaints a color. |
 | `auto` | `[]` | App notes: `{ key, title?, text?, color?, link?, linkLabel?, image?, due? }`. |
 | `notes` | `[]` | Written notes, if you load them yourself instead of `reload()`. |
@@ -87,6 +87,8 @@ No bundler and no modules? Use the classic build, which defines `window.PostitBo
 | `resizable` | `true` | Drag either bottom corner to resize the board (centered, min 480 × 320 px). Double-click a corner to reset. The gear can lock it. |
 | `width` | `0.8` | Default share of the width the board takes (10% margin on each side). |
 | `size` | `null` | A saved `{ width, height, locked }` to start with, as `store.load()` returns it. |
+| `expand` | `'center'` | How a note with cut text ("…") shows the rest: `'center'` opens it big on click, `'inplace'` grows it on hover, `'more'` adds a link. People can change it in the gear. |
+| `view` | `null` | A saved `{ expand }` to start with, as `store.load()` returns it. |
 | `onError` | `console.error` | Called when the store fails. The board also fires a `postit-error` event. |
 
 The returned board has `update({ notes?, auto?, positions? })`, `reload()`, `configure(options)`, `openEditor(draft?)`, `openSettings()`, `notes`, `legend` and `destroy()`.
@@ -121,6 +123,7 @@ watchDue(store, { onDue: (note) => notify(`⏰ ${note.title || note.text}`) });
 | `PUT /api/postits/key/:key` | `{ x, y, z }` | the position of an app note |
 | `PUT /api/postits/legend` | `{ legend }` | `{ legend }`, the note types edited with the gear |
 | `PUT /api/postits/size` | `{ size }` | `{ size }`, the board size from the corners (and the lock) |
+| `PUT /api/postits/view` | `{ view }` | `{ view }`, how cut text opens |
 
 Nothing is deleted: done and removed notes keep their row with a timestamp. Notes accept a `meta` object (JSON) for your own links, like a customer or ticket id. `onChange` on the store gets every create, update, done and remove (and `legend` when the types change), which makes an audit log easy.
 

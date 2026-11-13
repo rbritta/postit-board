@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   normalizeSize,
+  normalizeView,
   autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors, linkify, mergeLegend, normalizeLegend, normalizeNote,
   safeUrl, tilt, toLocalInput, withPositions,
 } from '../src/core.js';
@@ -114,4 +115,10 @@ test('normalizeSize keeps the board between its limits and falls back to the def
   assert.deepEqual(normalizeSize(null), { width: null, height: null, locked: false });
   assert.deepEqual(normalizeSize({ width: 0.05, height: 99999, locked: 'yes' }), { width: 0.2, height: 6000, locked: false });
   assert.deepEqual(normalizeSize({ width: 0.66666, height: 700.4, locked: true }), { width: 0.667, height: 700, locked: true });
+});
+
+test('normalizeView keeps only the known ways to open cut text', () => {
+  assert.deepEqual(normalizeView({ expand: 'more' }), { expand: 'more' });
+  assert.deepEqual(normalizeView({ expand: 'popup' }), { expand: null });
+  assert.deepEqual(normalizeView(null), { expand: null });
 });

@@ -269,6 +269,54 @@ test('the bottom corners resize the board, centered and saved; double-click rese
   await ctx.close();
 });
 
+test('cut text: a click opens it whole in the center; the gear switches to "more" or to growing in place', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx, errors } = await page(1400);
+  const long = 'word '.repeat(80).trim();
+  await p.evaluate(async (txt) => {
+    document.body.innerHTML = '<div id="b"></div>';
+    const { createBoard, localStore } = await import('../src/postit-board.js');
+    localStorage.removeItem('t-expand');
+    window.B = createBoard(document.getElementById('b'), { store: localStore('t-expand'), legend: [{ color: 'yellow', label: 'Notes' }],
+      notes: [{ id: 1, title: 'Long one', text: txt }, { id: 2, title: 'Short', text: 'ok' }],
+      auto: [{ key: 'a', title: 'App note', text: txt, link: '/x', linkLabel: 'open →' }] });
+  }, long);
+  const note = (title) => p.locator('.pb-note', { hasText: title });
+  // center (default): click opens the reader with the whole text, Esc closes
+  await note('Long one').click();
+  assert.equal(await p.locator('.pb-reader-text').textContent(), long);
+  assert.equal(await p.locator('.pb-reader [data-pb=reader-edit]').count(), 1);
+  await p.keyboard.press('Escape');
+  assert.equal(await p.locator('.pb-reader').isVisible().catch(() => false), false);
+  await note('App note').click();
+  assert.equal(await p.locator('.pb-reader .pb-link').textContent(), 'open →');
+  assert.equal(await p.locator('.pb-reader [data-pb=reader-edit]').count(), 0, 'app notes are read-only');
+  await p.click('.pb-reader-close');
+  // the end of a drag does not open it
+  const bb = await note('Short').boundingBox();
+  await p.mouse.move(bb.x + 40, bb.y + 40); await p.mouse.down(); await p.mouse.move(bb.x + 140, bb.y + 90, { steps: 4 }); await p.mouse.up();
+  assert.equal(await p.locator('.pb-dialog[open]').count(), 0);
+  // "more": only cut notes get the link, it opens in place and is saved in the store
+  await p.click('.pb-gear');
+  await p.check('[name=expand][value=more]');
+  await p.click('.pb-settings [type=submit]');
+  assert.equal(await p.locator('.pb-more').count(), 2);
+  await note('Long one').locator('.pb-more').click();
+  const open = await note('Long one').locator('.pb-text').evaluate((e) => e.scrollHeight - e.clientHeight < 10);
+  assert.ok(open, 'text no longer cut');
+  assert.equal(await note('Long one').locator('.pb-more').textContent(), 'less ▴');
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('t-expand')).view.expand), 'more');
+  // in place: hovering a cut note shows it whole
+  await p.evaluate(() => window.B.configure({ view: null }));
+  await p.click('.pb-gear');
+  await p.check('[name=expand][value=inplace]');
+  await p.click('.pb-settings [type=submit]');
+  await note('App note').hover();
+  assert.ok(await note('App note').locator('.pb-text').evaluate((e) => e.scrollHeight - e.clientHeight < 10), 'hover shows it whole');
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('on a phone the board is a grid without horizontal scroll', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page(360);

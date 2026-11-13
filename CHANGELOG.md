@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.4.0 (2026-11-13)
+
+- Read a cut note whole. By default a click opens it big in the center of the screen, with its link, Edit and Done. Esc or a click outside closes it, and the end of a drag never opens it.
+- Two more ways, picked in the gear and saved with `store.saveView` (`PUT /view`): the note grows in place on hover (a tap on touch screens), or a "more" link appears on notes whose text is cut.
+- New: option `expand` (`'center'`, `'inplace'` or `'more'`), option `view`, `normalizeView`, `EXPAND`, `board.view` and `board.openNote(ref)`.
+
 ## 0.3.0 (2026-11-13)
 
 - Resize the board from either bottom corner. It stays centered, keeps a minimum of 480 × 320 px and is saved with `store.saveSize` (`PUT /size`, `<table>_settings`, `localStore`). Double-click a corner to go back to the default.

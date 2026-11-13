@@ -46,6 +46,15 @@ export function normalizeSize(size) {
   };
 }
 
+/** How a note with cut text shows the rest: opened big in the center, grown in place on hover, or a "more" link. */
+export const EXPAND = Object.freeze(['center', 'inplace', 'more']);
+
+/** The board view people chose in the gear: `{ expand }`. Unknown values become null (the app default). */
+export function normalizeView(view) {
+  const v = view && typeof view === 'object' ? view : {};
+  return { expand: EXPAND.includes(v.expand) ? v.expand : null };
+}
+
 export function normalizeLegend(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();

@@ -12,7 +12,7 @@
  *
  * Nothing is ever deleted: done and removed notes keep their row with a timestamp.
  */
-import { LIMITS, isColorKey, normalizeDue, normalizeLegend, normalizeSize, safeUrl } from '../src/core.js';
+import { LIMITS, isColorKey, normalizeDue, normalizeLegend, normalizeSize, normalizeView, safeUrl } from '../src/core.js';
 
 const COLUMNS = `
   id INTEGER PRIMARY KEY,
@@ -124,7 +124,8 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
       for (const r of many(`SELECT key, x, y, z FROM ${table} WHERE key IS NOT NULL`)) positions[r.key] = { x: r.x, y: r.y, z: r.z };
       const legend = one(`SELECT value FROM ${table}_settings WHERE name = 'legend'`);
       const size = one(`SELECT value FROM ${table}_settings WHERE name = 'size'`);
-      return { notes, positions, ...(legend ? { legend: JSON.parse(legend.value) } : {}), ...(size ? { size: JSON.parse(size.value) } : {}) };
+      const view = one(`SELECT value FROM ${table}_settings WHERE name = 'view'`);
+      return { notes, positions, ...(legend ? { legend: JSON.parse(legend.value) } : {}), ...(size ? { size: JSON.parse(size.value) } : {}), ...(view ? { view: JSON.parse(view.value) } : {}) };
     },
 
     /** The note types people edited with the gear. The board merges them over the app's legend. */
@@ -145,6 +146,16 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
         ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, JSON.stringify(clean), now());
       onChange({ type: 'size', size: clean });
       return { size: clean };
+    },
+
+    /** How cut text opens, picked in the gear: `{ expand }`. */
+    saveView(view) {
+      if (!view || typeof view !== 'object') throw new ValidationError('view must be an object');
+      const clean = normalizeView(view);
+      run(`INSERT INTO ${table}_settings (name, value, updated_at) VALUES ('view', ?, ?)
+        ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, JSON.stringify(clean), now());
+      onChange({ type: 'view', view: clean });
+      return { view: clean };
     },
 
     get(id) {
