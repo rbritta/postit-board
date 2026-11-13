@@ -1,4 +1,4 @@
-/*! postit-board v0.2.1 | MIT | https://github.com/rbritta/postit-board */
+/*! postit-board v0.2.2 | MIT | https://github.com/rbritta/postit-board */
 (function (global) {
 'use strict';
 /**
@@ -440,16 +440,29 @@ function createBoard(root, options = {}) {
     renderLegend();
   }
 
-  /** Notes without a position stack in four columns by their real height, so none covers another. */
+  /** How many columns of notes fit: a wide screen gets more of them, never fewer than four. */
+  function columnsFor(width) {
+    const noteWidth = Math.min(220, width * 0.23);
+    return Math.max(4, Math.floor((width - 24) / (noteWidth + 28)));
+  }
+  let flowColumns = 0;
+  /** where flow() put each note: a note still there was never moved, and reflows with the window */
+  const flowed = new Map();
+
+  /** Notes without a position stack in as many columns as fit, by their real height, so none covers another. */
   function flow(flowing) {
-    const columns = 4;
+    const width = glass.clientWidth || 1;
+    const columns = columnsFor(width);
+    flowColumns = columns;
+    const step = (width - 24) / columns;
     const bottoms = Array(columns).fill(26);
     flowing.forEach((n, k) => {
       const el = glass.querySelector(`[data-ref="${CSS.escape(refId(refOf(n)))}"]`);
       if (!el) return;
       const col = k % columns;
-      n.x = col / columns + 0.012;
+      n.x = (12 + col * step) / width;
       n.y = bottoms[col];
+      flowed.set(refId(refOf(n)), `${n.x},${n.y}`);
       el.style.setProperty('--pb-x', n.x);
       el.style.setProperty('--pb-y', `${n.y}px`);
       bottoms[col] += el.offsetHeight + 34;
@@ -813,6 +826,21 @@ function createBoard(root, options = {}) {
   addEventListener('scroll', closeMenu, true);
   addEventListener('resize', closeMenu);
   addEventListener('blur', closeMenu);
+  // a wider or narrower window reflows the notes nobody placed
+  let resizeTimer = 0;
+  const onResize = () => {
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(() => {
+      if (drag || !flowColumns || columnsFor(glass.clientWidth || 1) === flowColumns) return;
+      for (const n of all()) {
+        const k = refId(refOf(n));
+        if (flowed.get(k) === `${n.x},${n.y}`) { n.x = null; n.y = null; }
+        flowed.delete(k);
+      }
+      render();
+    }, 150);
+  };
+  addEventListener('resize', onResize);
   // due chips move from "Tomorrow" to "Today" to overdue without a reload
   const ticker = setInterval(() => { if (!drag && !dialog.open && all().some((n) => n.due)) render(); }, 60_000);
 
@@ -853,6 +881,8 @@ function createBoard(root, options = {}) {
       document.removeEventListener('pointerdown', onOutside, true);
       removeEventListener('scroll', closeMenu, true);
       removeEventListener('resize', closeMenu);
+      removeEventListener('resize', onResize);
+      clearTimeout(resizeTimer);
       removeEventListener('blur', closeMenu);
       root.classList.remove('pb');
       root.innerHTML = '';

@@ -208,6 +208,28 @@ test('the gear edits the types: rename, recolor, add, remove; app types only ren
   await ctx.close();
 });
 
+test('a wide screen gets more columns; long text ends in an ellipsis with the full text in the tooltip', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx, errors } = await page(1900);
+  const long = 'word '.repeat(80).trim();
+  await p.evaluate(async (txt) => {
+    document.body.innerHTML = '<div id="wide" style="width:100%"></div>';
+    const { createBoard } = await import('../src/postit-board.js');
+    const notes = Array.from({ length: 10 }, (_, i) => ({ id: i + 1, title: `n${i}`, text: i ? 'short' : txt }));
+    createBoard(document.getElementById('wide'), { notes });
+  }, long);
+  const columns = () => p.$$eval('#wide .pb-note', (els) => new Set(els.map((e) => e.offsetLeft)).size);
+  assert.ok((await columns()) > 4, `columns: ${await columns()}`);
+  await p.setViewportSize({ width: 1000, height: 900 });
+  await p.waitForTimeout(400);
+  assert.equal(await columns(), 4);
+  const clip = await p.$eval('#wide .pb-text', (e) => ({ cut: e.scrollHeight > e.clientHeight + 2, title: e.title }));
+  assert.ok(clip.cut, 'text is clipped');
+  assert.equal(clip.title, long);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('on a phone the board is a grid without horizontal scroll', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page(360);

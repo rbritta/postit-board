@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.2 (2026-11-13)
+
+- Wide screens get more columns: notes nobody placed flow into as many 220 px columns as fit (never fewer than four), and reflow when the window changes width.
+- The demo uses the whole width.
+
 ## 0.2.1 (2026-11-13)
 
 - Smaller notes: long titles stop at 2 lines and long text at 4, ending in "…". The full text is in the tooltip and in Edit. Tune with `--pb-title-lines` / `--pb-text-lines` (`none` shows everything).
