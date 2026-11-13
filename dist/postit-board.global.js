@@ -1,4 +1,4 @@
-/*! postit-board v0.2.0 | MIT | https://github.com/rbritta/postit-board */
+/*! postit-board v0.2.1 | MIT | https://github.com/rbritta/postit-board */
 (function (global) {
 'use strict';
 /**
@@ -420,9 +420,9 @@ function createBoard(root, options = {}) {
         data-ref="${escapeHtml(ref)}" data-color="${escapeHtml(n.color)}"
         style="--pb-x:${n.x};--pb-y:${n.y}px;--pb-z:${n.z || 0};--pb-r:${tilt(ref)}deg;--pb-note:${escapeHtml(swatch)}">
       <span class="pb-tape" aria-hidden="true"></span>
-      ${n.title ? `<h3 class="pb-title">${escapeHtml(n.title)}</h3>` : ''}
+      ${n.title ? `<h3 class="pb-title" title="${escapeHtml(n.title)}">${escapeHtml(n.title)}</h3>` : ''}
       ${n.image ? `<img class="pb-img" src="${escapeHtml(n.image)}" alt="" loading="lazy" draggable="false">` : ''}
-      ${n.text ? `<p class="pb-text">${linkify(n.text)}</p>` : ''}
+      ${n.text ? `<p class="pb-text" title="${escapeHtml(n.text)}">${linkify(n.text)}</p>` : ''}
       ${link && !n.auto ? `<p class="pb-linkrow">${link}</p>` : ''}
       <div class="pb-foot">${due}<span class="pb-spacer"></span>${n.auto ? link : ''}${actions}</div>
     </article>`;

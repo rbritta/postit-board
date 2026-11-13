@@ -90,7 +90,7 @@ The returned board has `update({ notes?, auto?, positions? })`, `reload()`, `con
 
 The legend people saved comes back in `store.load()` and is merged over the one you pass (`mergeLegend`): their order, names and colors win, and your `locked` types are always there. A note whose type was removed keeps its color, it just leaves the legend.
 
-Built-in colors: `yellow`, `pink`, `green`, `blue`, `orange`, `purple`, `teal`, `gray`. Styling is plain CSS custom properties on `.pb` (`--pb-accent`, `--pb-note-width`, `--pb-font`…). Add `data-theme="light"` for light pages.
+Built-in colors: `yellow`, `pink`, `green`, `blue`, `orange`, `purple`, `teal`, `gray`. Styling is plain CSS custom properties on `.pb` (`--pb-accent`, `--pb-note-width`, `--pb-font`, `--pb-text-lines` and `--pb-title-lines` for where long text is cut with "…"…). Add `data-theme="light"` for light pages.
 
 ## Server
 

@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.2.1 (2026-11-13)
+
+- Smaller notes: long titles stop at 2 lines and long text at 4, ending in "…". The full text is in the tooltip and in Edit. Tune with `--pb-title-lines` / `--pb-text-lines` (`none` shows everything).
+- Minimum note height 180 → 140 px (120 px in the narrow list).
+
 ## 0.2.0 (2026-11-13)
 
 - Right-click the glass: a menu of the note types (with their meanings) creates a note exactly where you clicked. Double-click lands there too now.

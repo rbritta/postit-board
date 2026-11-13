@@ -9,7 +9,9 @@
   --pb-danger: #f87171;
   --pb-radius: 14px;
   --pb-note-width: min(220px, 23%);
-  --pb-note-min-height: 180px;
+  --pb-note-min-height: 140px;
+  --pb-title-lines: 2;
+  --pb-text-lines: 4;
   --pb-font: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --pb-ui-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   container-type: inline-size;
@@ -68,8 +70,11 @@
   position: absolute; top: -11px; left: 50%; width: 76px; height: 24px;
   transform: translateX(-50%) rotate(-3deg); background: rgba(255, 255, 255, 0.42); box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
-.pb-title { margin: 0; font-size: 16.5px; font-weight: 700; line-height: 1.25; }
-.pb-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; flex: 1; }
+.pb-title { margin: 0; font-size: 16.5px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pb-title-lines); line-clamp: var(--pb-title-lines); overflow: hidden; }
+/* long text ends in "…" (the full text is in the tooltip and in Edit); set --pb-text-lines: none to show everything */
+.pb-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pb-text-lines); line-clamp: var(--pb-text-lines); overflow: hidden; }
 .pb-img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; pointer-events: none; }
 .pb-linkrow { margin: 0; font: 13px var(--pb-ui-font); overflow-wrap: anywhere; }
 .pb-note a { color: #1d3a78; font-weight: 600; }
@@ -119,7 +124,7 @@
   .pb-bar { justify-content: flex-end; }
   .pb-glass { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 14px; padding: 22px 12px 14px; min-height: 0; }
   .pb-glass { --pb-height: auto; }
-  .pb-note { position: relative; left: auto; top: auto; width: auto; min-height: 150px; cursor: default; touch-action: auto; user-select: text; }
+  .pb-note { position: relative; left: auto; top: auto; width: auto; min-height: 120px; cursor: default; touch-action: auto; user-select: text; }
   .pb-empty { position: static; padding: 24px; }
 }
 
