@@ -1,0 +1,33 @@
+{
+  "name": "postit-board",
+  "version": "0.1.0",
+  "description": "A glass board of draggable sticky notes with a color legend, due times and app-generated notes. Zero dependencies, vanilla JS, with a SQLite store for Node.",
+  "keywords": ["sticky-notes", "post-it", "kanban", "board", "dashboard", "vanilla-js", "sqlite", "no-dependencies"],
+  "homepage": "https://github.com/rbritta/postit-board",
+  "repository": { "type": "git", "url": "git+https://github.com/rbritta/postit-board.git" },
+  "bugs": "https://github.com/rbritta/postit-board/issues",
+  "license": "MIT",
+  "author": "rbritta",
+  "type": "module",
+  "main": "./src/postit-board.js",
+  "exports": {
+    ".": "./src/postit-board.js",
+    "./core": "./src/core.js",
+    "./style.css": "./src/postit-board.css",
+    "./server": "./server/index.js",
+    "./global": "./dist/postit-board.global.js"
+  },
+  "files": ["src", "server", "dist", "AGENTS.md"],
+  "sideEffects": ["*.css"],
+  "engines": { "node": ">=22.5" },
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test \"test/*.test.js\"",
+    "demo": "node scripts/serve-demo.mjs",
+    "screenshots": "node scripts/screenshots.mjs",
+    "prepublishOnly": "npm run build && npm test"
+  },
+  "devDependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

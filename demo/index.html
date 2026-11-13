@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>postit-board demo</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../src/postit-board.css">
+  <style>
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 20% 0%, #1e293b, #0b1016 60%); color: #e6edf3; font: 15px system-ui, sans-serif; }
+    main { max-width: 1180px; margin: 0 auto; padding: 28px 20px 40px; }
+    header { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; margin-bottom: 14px; }
+    h1 { margin: 0; font-size: 22px; }
+    header p { margin: 0; color: #9aa4b2; flex: 1 1 320px; }
+    header button { background: none; color: #9aa4b2; border: 1px solid #30363d; border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>postit-board</h1>
+      <p>Drag the notes, double-click the glass to add one, click a legend item to filter. Saved in this browser.</p>
+      <button type="button" id="reset">Reset demo</button>
+    </header>
+    <section id="board" aria-label="Board"></section>
+  </main>
+
+  <script type="module">
+    import { createBoard, localStore } from '../src/postit-board.js';
+
+    const hours = (h) => new Date(Date.now() + h * 3_600_000).toISOString();
+    const SAMPLE = [
+      { title: 'Lorem ipsum', text: 'Dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor.', color: 'yellow', due: hours(3) },
+      { title: 'Vestibulum ante', text: 'Ipsum primis in faucibus: https://example.com/lorem', color: 'blue', image: './img/mountains.svg' },
+      { title: 'Curabitur', text: 'Pretium tincidunt lacus. Nulla gravida orci a odio.', color: 'green', link: 'https://example.com/report', linkLabel: 'Report →', due: hours(30) },
+      { title: 'Quarterly numbers', text: 'Integer in mauris eu nibh euismod gravida.', color: 'purple', image: './img/chart.svg' },
+      { title: 'Nam liber', text: 'Tempor cum soluta nobis eleifend option congue nihil imperdiet.', color: 'yellow', due: hours(-2) },
+      { title: 'Desk setup', text: 'Duis aute irure dolor in reprehenderit.', color: 'teal', image: './img/desk.svg' },
+    ];
+    // what an app would compute from its own data on every render
+    const AUTO = [
+      { key: 'auto:backup', title: 'Backup is 2 days old', text: 'Ut enim ad minim veniam, quis nostrud.', color: 'pink', link: '#backup' },
+      { key: 'auto:disk', title: 'Disk at 91%', text: 'Excepteur sint occaecat cupidatat.', color: 'orange', link: '#disk' },
+    ];
+
+    const store = localStore('postit-board-demo');
+    if (!localStorage.getItem('postit-board-demo')) SAMPLE.forEach((n) => store.create(n));
+
+    const board = createBoard(document.getElementById('board'), {
+      store,
+      auto: AUTO,
+      legend: [
+        { color: 'pink', label: 'Broken', description: 'Something failed (added by the app)' },
+        { color: 'orange', label: 'Attention', description: 'Needs a look soon (added by the app)' },
+        { color: 'yellow', label: 'Notes', description: 'Anything you write' },
+        { color: 'green', label: 'Routine', description: 'Recurring chores' },
+        { color: 'purple', label: 'Numbers', description: 'Reports and metrics' },
+        { color: 'teal', label: 'Home', description: 'Around the house' },
+        { color: 'blue', label: 'Someday', description: 'Future improvements' },
+      ],
+    });
+    board.reload();
+
+    document.getElementById('reset').addEventListener('click', () => {
+      localStorage.removeItem('postit-board-demo');
+      location.reload();
+    });
+  </script>
+</body>
+</html>
