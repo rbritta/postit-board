@@ -27,6 +27,25 @@ export const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.t
  * `color` is the key notes carry; `hex` repaints that key; `locked` marks a type the app owns
  * (its color can't change and it can't be removed, only renamed). Bad entries are dropped.
  */
+/** Board size limits: the width is a share of the space the board has, the height is in pixels. */
+export const SIZE = Object.freeze({ width: 0.8, minWidth: 480, minHeight: 320, maxHeight: 6000 });
+
+/**
+ * The board size people chose by dragging its bottom corners: `{ width, height, locked }`.
+ * `width` is a share of the available width (0.2 to 1), `height` pixels (null = grow with the notes),
+ * `locked` hides the handles. Anything else falls back to the default.
+ */
+export function normalizeSize(size) {
+  const s = size && typeof size === 'object' ? size : {};
+  const w = Number(s.width);
+  const h = Number(s.height);
+  return {
+    width: s.width != null && Number.isFinite(w) ? Math.min(1, Math.max(0.2, Math.round(w * 1000) / 1000)) : null,
+    height: s.height != null && Number.isFinite(h) ? Math.min(SIZE.maxHeight, Math.max(SIZE.minHeight, Math.round(h))) : null,
+    locked: s.locked === true,
+  };
+}
+
 export function normalizeLegend(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();

@@ -230,6 +230,45 @@ test('a wide screen gets more columns; long text ends in an ellipsis with the fu
   await ctx.close();
 });
 
+test('the bottom corners resize the board, centered and saved; double-click resets; the gear locks it', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx, errors } = await page(1400);
+  const box = () => p.$eval('.pb-stage', (e) => { const r = e.getBoundingClientRect(); const a = e.closest('.pb').getBoundingClientRect(); return { w: Math.round(r.width), left: Math.round(r.left - a.left), right: Math.round(a.right - r.right), h: Math.round(e.querySelector('.pb-glass').getBoundingClientRect().height), avail: Math.round(a.width) }; });
+  const b0 = await box();
+  assert.ok(Math.abs(b0.w - b0.avail * 0.8) <= 2 && Math.abs(b0.left - b0.right) <= 2, JSON.stringify(b0));
+  const h = await p.locator('.pb-resize--right').boundingBox();
+  await p.mouse.move(h.x + 11, h.y + 11);
+  await p.mouse.down();
+  await p.mouse.move(h.x + 11 - 100, h.y + 11 - 150, { steps: 5 });
+  await p.mouse.up();
+  const b1 = await box();
+  assert.ok(Math.abs(b1.w - (b0.w - 200)) <= 3 && Math.abs(b1.left - b1.right) <= 2 && Math.abs(b1.h - (b0.h - 150)) <= 3, JSON.stringify({ b0, b1 }));
+  const l = await p.locator('.pb-resize--left').boundingBox();
+  await p.mouse.move(l.x + 11, l.y + 11);
+  await p.mouse.down();
+  await p.mouse.move(l.x + 11 + 5000, l.y + 11 - 5000, { steps: 5 });
+  await p.mouse.up();
+  const b2 = await box();
+  assert.ok(b2.w === Math.min(b2.avail, 480) || Math.abs(b2.w - 480) <= 2, `minimum width: ${JSON.stringify(b2)}`);
+  assert.ok(Math.abs(b2.h - 320) <= 2, `minimum height: ${b2.h}`);
+  const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('postit-board-demo')).size);
+  assert.equal(saved.height, 320);
+  await p.reload();
+  await p.waitForSelector('.pb-note');
+  const b3 = await box();
+  assert.ok(Math.abs(b3.w - b2.w) <= 2 && Math.abs(b3.h - 320) <= 2, `after reload: ${JSON.stringify(b3)}`);
+  await p.dblclick('.pb-resize--right');
+  const b4 = await box();
+  assert.ok(Math.abs(b4.w - b4.avail * 0.8) <= 2, `reset: ${JSON.stringify(b4)}`);
+  await p.click('.pb-gear');
+  await p.check('[name=lockSize]');
+  await p.click('.pb-settings [type=submit]');
+  assert.equal(await p.locator('.pb-resize--right').isVisible(), false);
+  assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('postit-board-demo')).size.locked), true);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('on a phone the board is a grid without horizontal scroll', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page(360);

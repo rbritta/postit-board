@@ -14,11 +14,14 @@
  *   - automatic notes your app computes (`auto`): folded corner, read-only, they go away
  *     when your app stops sending them. Only their position is stored, by `key`.
  *
+ * Drag either bottom corner of the glass to resize the board: it stays centered and the size is
+ * saved through `store.saveSize` (the gear can lock it). By default it takes 80% of the width.
+ *
  * The board never talks to a server by itself: every change goes through `store`
  * (see `restStore` for the matching HTTP client, and `server/` for the Node side).
  */
 import {
-  DEFAULT_COLORS, autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors,
+  DEFAULT_COLORS, SIZE, normalizeSize, autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors,
   linkify, mergeLegend, normalizeLegend, normalizeNote, refId, refOf, safeUrl, tilt, toLocalInput, withPositions,
 } from './core.js';
 
@@ -60,6 +63,8 @@ export const DEFAULT_STRINGS = Object.freeze({
   moveUp: 'Move up',
   removeType: 'Remove type',
   locked: 'Set by the app: rename only',
+  resize: 'Drag to resize the board · double-click to reset',
+  lockSize: 'Lock the board size',
 });
 
 const DEFAULTS = {
@@ -76,6 +81,9 @@ const DEFAULTS = {
   editLegend: null,
   defaultColor: null,
   gridBelow: 700,
+  resizable: true,
+  width: SIZE.width,
+  size: null,
   onError: (err) => console.error('[postit-board]', err),
   now: () => new Date(),
 };
@@ -101,6 +109,7 @@ export function restStore(base, { headers = {}, fetch: doFetch = globalThis.fetc
     update: (ref, patch) =>
       ref.key != null ? call('PUT', `/key/${encodeURIComponent(ref.key)}`, patch) : call('PATCH', `/${ref.id}`, patch),
     saveLegend: (legend) => call('PUT', '/legend', { legend }),
+    saveSize: (size) => call('PUT', '/size', { size }),
   };
 }
 
@@ -113,7 +122,13 @@ export function localStore(name = 'postit-board', storage = globalThis.localStor
   return {
     load: () => {
       const d = read();
-      return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions, ...(d.legend ? { legend: d.legend } : {}) };
+      return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions, ...(d.legend ? { legend: d.legend } : {}), ...(d.size ? { size: d.size } : {}) };
+    },
+    saveSize(size) {
+      const d = read();
+      d.size = normalizeSize(size);
+      write(d);
+      return { size: d.size };
     },
     saveLegend(legend) {
       const d = read();
@@ -168,6 +183,7 @@ export function createBoard(root, options = {}) {
   let auto = [];
   let rawAuto = [];
   let positions = { ...opts.positions };
+  let size = normalizeSize(opts.size);
   const hidden = new Set();
   let drag = null;
 
@@ -177,11 +193,16 @@ export function createBoard(root, options = {}) {
       <span class="pb-hint">${escapeHtml(t.hint)}</span>
       ${opts.addButton ? `<button type="button" class="pb-btn" data-pb="add">${escapeHtml(t.add)}</button>` : ''}
     </div>
-    <div class="pb-glass" role="list"></div>
+    <div class="pb-stage">
+      <div class="pb-glass" role="list"></div>
+      <span class="pb-resize pb-resize--left" data-side="-1" title="${escapeHtml(t.resize)}" aria-hidden="true"></span>
+      <span class="pb-resize pb-resize--right" data-side="1" title="${escapeHtml(t.resize)}" aria-hidden="true"></span>
+    </div>
     <footer class="pb-legend" aria-label="${escapeHtml(t.legend)}"></footer>
     <div class="pb-menu" role="menu" hidden></div>
     <dialog class="pb-dialog" aria-labelledby="${id}-h"></dialog>`;
   const glass = root.querySelector('.pb-glass');
+  const stage = root.querySelector('.pb-stage');
   const legendEl = root.querySelector('.pb-legend');
   const menu = root.querySelector('.pb-menu');
   const dialog = root.querySelector('.pb-dialog');
@@ -270,8 +291,59 @@ export function createBoard(root, options = {}) {
 
   function fitHeight() {
     if (isGrid()) return;
+    if (size.height) { glass.style.setProperty('--pb-height', `${size.height}px`); return; }
     const bottom = Math.max(0, ...[...glass.querySelectorAll('.pb-note')].map((el) => el.offsetTop + el.offsetHeight));
     glass.style.setProperty('--pb-height', `${Math.max(560, bottom + 40)}px`);
+  }
+
+  /* ---------- the board size: both bottom corners resize it, always centered ---------- */
+  const canResize = () => opts.resizable && !size.locked;
+  function applySize() {
+    root.style.setProperty('--pb-frame', `${(size.width ?? opts.width) * 100}%`);
+    glass.classList.toggle('pb-glass--fixed', Boolean(size.height));
+    root.classList.toggle('pb--resizable', canResize());
+  }
+  let sizing = null;
+  function onResizeDown(ev) {
+    const handle = ev.target.closest('.pb-resize');
+    if (!handle || ev.button !== 0 || !canResize() || isGrid()) return;
+    ev.preventDefault();
+    handle.setPointerCapture?.(ev.pointerId);
+    sizing = { side: Number(handle.dataset.side), x: ev.clientX, y: ev.clientY, w: stage.offsetWidth, h: glass.offsetHeight, handle, moved: false };
+    root.classList.add('pb--sizing');
+  }
+  function onResizeMove(ev) {
+    if (!sizing) return;
+    const avail = root.clientWidth || 1;
+    // centered: the corner you drag moves, and the other side follows the same way
+    const w = Math.min(avail, Math.max(Math.min(avail, SIZE.minWidth), sizing.w + 2 * sizing.side * (ev.clientX - sizing.x)));
+    const h = Math.min(SIZE.maxHeight, Math.max(SIZE.minHeight, sizing.h + ev.clientY - sizing.y));
+    sizing.moved = true;
+    size = { ...size, width: w / avail, height: Math.round(h) };
+    root.style.setProperty('--pb-frame', `${w}px`);
+    glass.classList.add('pb-glass--fixed');
+    glass.style.setProperty('--pb-height', `${size.height}px`);
+  }
+  async function onResizeUp() {
+    if (!sizing) return;
+    const moved = sizing.moved;
+    sizing = null;
+    root.classList.remove('pb--sizing');
+    if (!moved) return;
+    size = normalizeSize(size);
+    applySize();
+    render();
+    await saveSize();
+  }
+  async function resetSize(ev) {
+    if (!ev.target.closest('.pb-resize') || !canResize()) return;
+    size = { width: null, height: null, locked: size.locked };
+    applySize();
+    render();
+    await saveSize();
+  }
+  async function saveSize() {
+    try { await opts.store?.saveSize?.(size); } catch (err) { fail(err); }
   }
 
   function renderLegend() {
@@ -386,6 +458,7 @@ export function createBoard(root, options = {}) {
       <h2 id="${id}-h">${escapeHtml(t.settings)}</h2>
       <p class="pb-settings-hint">${escapeHtml(t.settingsHint)}</p>
       <ol class="pb-types">${opts.legend.map(typeRow).join('')}</ol>
+      ${opts.resizable ? `<label class="pb-lock"><input type="checkbox" name="lockSize"${size.locked ? ' checked' : ''}> ${escapeHtml(t.lockSize)}</label>` : ''}
       <div class="pb-actions">
         <button type="button" class="pb-btn" data-pb="type-add">${escapeHtml(t.addType)}</button>
         <span class="pb-spacer"></span>
@@ -425,8 +498,12 @@ export function createBoard(root, options = {}) {
       dialog.close();
       savedLegend = legend;
       applyLegend();
+      const lock = form.querySelector('[name=lockSize]');
+      const sizeChanged = lock && lock.checked !== size.locked;
+      if (sizeChanged) { size = { ...size, locked: lock.checked }; applySize(); }
       render();
       try { await opts.store?.saveLegend?.(legend); } catch (err) { fail(err); }
+      if (sizeChanged) await saveSize();
     });
     dialog.showModal();
     form.querySelector('[name=label]')?.focus();
@@ -640,10 +717,16 @@ export function createBoard(root, options = {}) {
     }, 150);
   };
   addEventListener('resize', onResize);
+  stage.addEventListener('pointerdown', onResizeDown);
+  stage.addEventListener('pointermove', onResizeMove);
+  stage.addEventListener('pointerup', onResizeUp);
+  stage.addEventListener('pointercancel', onResizeUp);
+  stage.addEventListener('dblclick', resetSize);
   // due chips move from "Tomorrow" to "Today" to overdue without a reload
   const ticker = setInterval(() => { if (!drag && !dialog.open && all().some((n) => n.due)) render(); }, 60_000);
 
   setData({ notes: opts.notes, auto: opts.auto, positions: opts.positions });
+  applySize();
   render();
 
   return {
@@ -655,6 +738,7 @@ export function createBoard(root, options = {}) {
       try {
         const data = await opts.store.load();
         if (data.legend) { savedLegend = data.legend; applyLegend(); }
+        if (data.size) { size = normalizeSize(data.size); applySize(); }
         setData({ notes: data.notes, positions: data.positions });
         render();
       } catch (err) { fail(err); }
@@ -669,6 +753,8 @@ export function createBoard(root, options = {}) {
     },
     openEditor: (draft) => openEditor(null, draft),
     openSettings: () => openSettings(),
+    /** The board size people chose: `{ width, height, locked }` (null = the default). */
+    get size() { return { ...size }; },
     /** The legend in use: what the app shipped plus what people changed with the gear. */
     get legend() { return opts.legend.map((i) => ({ ...i })); },
     get notes() { return notes.map((n) => ({ ...n })); },

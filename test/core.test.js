@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  normalizeSize,
   autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors, linkify, mergeLegend, normalizeLegend, normalizeNote,
   safeUrl, tilt, toLocalInput, withPositions,
 } from '../src/core.js';
@@ -107,4 +108,10 @@ test('mergeLegend: saved order, names and colors win; app types stay and keep th
   // an app type the saved legend lost comes back at the end
   assert.deepEqual(mergeLegend(app, [{ color: 'blue', label: 'Later' }]).map((i) => i.color), ['blue', 'pink']);
   assert.deepEqual(legendColors(saved), { yellow: '#ffcc00', pink: '#000000', 'c-1': '#123456' });
+});
+
+test('normalizeSize keeps the board between its limits and falls back to the default', () => {
+  assert.deepEqual(normalizeSize(null), { width: null, height: null, locked: false });
+  assert.deepEqual(normalizeSize({ width: 0.05, height: 99999, locked: 'yes' }), { width: 0.2, height: 6000, locked: false });
+  assert.deepEqual(normalizeSize({ width: 0.66666, height: 700.4, locked: true }), { width: 0.667, height: 700, locked: true });
 });

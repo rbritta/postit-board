@@ -13,6 +13,7 @@
  *   PATCH  /api/postits/:id          -> the note (fields, { done: true } or { removed: true })
  *   PUT    /api/postits/key/:key     -> position of an automatic note { x, y, z }
  *   PUT    /api/postits/legend       -> { legend } edited with the gear
+ *   PUT    /api/postits/size         -> { size } chosen by dragging the corners
  *
  * Authentication and CSRF are yours: run your checks before calling `handle`.
  */
@@ -52,6 +53,7 @@ export function createHttpHandler(store, { prefix = '/api/postits' } = {}) {
       if (rest === '' && req.method === 'GET') return send(res, 200, await store.load()), true;
       if (rest === '' && req.method === 'POST') return send(res, 201, await store.create(await readJson(req))), true;
       if (rest === '/legend' && req.method === 'PUT' && store.saveLegend) return send(res, 200, await store.saveLegend((await readJson(req)).legend)), true;
+      if (rest === '/size' && req.method === 'PUT' && store.saveSize) return send(res, 200, await store.saveSize((await readJson(req)).size)), true;
       let m = rest.match(/^\/(\d+)$/);
       if (m && req.method === 'PATCH') return send(res, 200, await store.update({ id: Number(m[1]) }, await readJson(req))), true;
       m = rest.match(/^\/key\/([^/]+)$/);

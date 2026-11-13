@@ -100,6 +100,9 @@ test('restStore and the HTTP handler speak the same routes', async () => {
     const saved = await client.saveLegend([{ color: 'green', label: 'Print', hex: '#00ff00' }, { color: 'BAD' }]);
     assert.deepEqual(saved.legend, [{ color: 'green', label: 'Print', hex: '#00ff00' }]);
     assert.deepEqual((await client.load()).legend, saved.legend);
+    const size = await client.saveSize({ width: 5, height: 10, locked: true, extra: 1 });
+    assert.deepEqual(size.size, { width: 1, height: 320, locked: true }, 'clamped to the limits');
+    assert.deepEqual((await client.load()).size, size.size);
     await assert.rejects(fetch(`${base}/api/postits/legend`, { method: 'PUT', body: '{"legend":"x"}' }).then((r) => r.json()).then((d) => { throw new Error(d.error); }), /legend must be a list/);
     assert.equal((await fetch(`${base}/other`)).status, 418);
     assert.equal((await fetch(`${base}/api/postits/abc`, { method: 'DELETE' })).status, 404);

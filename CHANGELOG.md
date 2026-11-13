@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.3.0 (2026-11-13)
+
+- Resize the board from either bottom corner. It stays centered, keeps a minimum of 480 × 320 px and is saved with `store.saveSize` (`PUT /size`, `<table>_settings`, `localStore`). Double-click a corner to go back to the default.
+- By default the board takes 80% of the width (option `width`), leaving 10% on each side.
+- The gear has "Lock the board size", which hides the corners.
+- New: `normalizeSize`, `SIZE`, the `size` option (start with a saved size and skip a reload) and the `board.size` getter. Option `resizable: false` turns it off.
+
 ## 0.2.2 (2026-11-13)
 
 - Wide screens get more columns: notes nobody placed flow into as many 220 px columns as fit (never fewer than four), and reflow when the window changes width.

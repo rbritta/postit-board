@@ -12,7 +12,7 @@
  *
  * Nothing is ever deleted: done and removed notes keep their row with a timestamp.
  */
-import { LIMITS, isColorKey, normalizeDue, normalizeLegend, safeUrl } from '../src/core.js';
+import { LIMITS, isColorKey, normalizeDue, normalizeLegend, normalizeSize, safeUrl } from '../src/core.js';
 
 const COLUMNS = `
   id INTEGER PRIMARY KEY,
@@ -123,7 +123,8 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
       const positions = {};
       for (const r of many(`SELECT key, x, y, z FROM ${table} WHERE key IS NOT NULL`)) positions[r.key] = { x: r.x, y: r.y, z: r.z };
       const legend = one(`SELECT value FROM ${table}_settings WHERE name = 'legend'`);
-      return legend ? { notes, positions, legend: JSON.parse(legend.value) } : { notes, positions };
+      const size = one(`SELECT value FROM ${table}_settings WHERE name = 'size'`);
+      return { notes, positions, ...(legend ? { legend: JSON.parse(legend.value) } : {}), ...(size ? { size: JSON.parse(size.value) } : {}) };
     },
 
     /** The note types people edited with the gear. The board merges them over the app's legend. */
@@ -134,6 +135,16 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
         ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, JSON.stringify(clean), now());
       onChange({ type: 'legend', legend: clean });
       return { legend: clean };
+    },
+
+    /** The board size people chose by dragging its corners (and the lock from the gear). */
+    saveSize(size) {
+      if (!size || typeof size !== 'object') throw new ValidationError('size must be an object');
+      const clean = normalizeSize(size);
+      run(`INSERT INTO ${table}_settings (name, value, updated_at) VALUES ('size', ?, ?)
+        ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, JSON.stringify(clean), now());
+      onChange({ type: 'size', size: clean });
+      return { size: clean };
     },
 
     get(id) {
