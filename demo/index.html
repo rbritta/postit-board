@@ -19,7 +19,7 @@
   <main>
     <header>
       <h1>postit-board</h1>
-      <p>Drag the notes, double-click the glass to add one, click a legend item to filter. Saved in this browser.</p>
+      <p>Drag the notes, right-click the glass to add one where you clicked, click a legend item to filter, and edit the types with the gear. Saved in this browser.</p>
       <button type="button" id="reset">Reset demo</button>
     </header>
     <section id="board" aria-label="Board"></section>
@@ -50,8 +50,8 @@
       store,
       auto: AUTO,
       legend: [
-        { color: 'pink', label: 'Broken', description: 'Something failed (added by the app)' },
-        { color: 'orange', label: 'Attention', description: 'Needs a look soon (added by the app)' },
+        { color: 'pink', label: 'Broken', description: 'Something failed (added by the app)', locked: true },
+        { color: 'orange', label: 'Attention', description: 'Needs a look soon (added by the app)', locked: true },
         { color: 'yellow', label: 'Notes', description: 'Anything you write' },
         { color: 'green', label: 'Routine', description: 'Recurring chores' },
         { color: 'purple', label: 'Numbers', description: 'Reports and metrics' },

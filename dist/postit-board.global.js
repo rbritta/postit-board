@@ -1,4 +1,4 @@
-/*! postit-board v0.1.0 | MIT | https://github.com/rbritta/postit-board */
+/*! postit-board v0.2.0 | MIT | https://github.com/rbritta/postit-board */
 (function (global) {
 'use strict';
 /**
@@ -18,11 +18,55 @@ const DEFAULT_COLORS = Object.freeze({
   gray: '#e5e7eb',
 });
 
-const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32 });
+const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32, label: 40, description: 160, legend: 24 });
 
 const COLOR_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 
 const isColorKey = (value) => typeof value === 'string' && COLOR_KEY.test(value);
+const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+
+/**
+ * A legend as the board and the stores keep it: `[{ color, label, description?, hex?, locked? }]`.
+ * `color` is the key notes carry; `hex` repaints that key; `locked` marks a type the app owns
+ * (its color can't change and it can't be removed, only renamed). Bad entries are dropped.
+ */
+function normalizeLegend(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || !isColorKey(item.color) || seen.has(item.color)) continue;
+    seen.add(item.color);
+    const entry = { color: item.color, label: text(item.label, LIMITS.label).trim() || item.color };
+    const description = text(item.description, LIMITS.description).trim();
+    if (description) entry.description = description;
+    if (isHex(item.hex)) entry.hex = item.hex.toLowerCase();
+    if (item.locked === true) entry.locked = true;
+    out.push(entry);
+    if (out.length >= LIMITS.legend) break;
+  }
+  return out;
+}
+
+/**
+ * The legend people saved, on top of the one the app ships. Saved order, names and colors
+ * win; the app's locked types always stay (renamed if they were), and keep their color.
+ */
+function mergeLegend(appLegend, saved) {
+  const app = normalizeLegend(appLegend);
+  if (!Array.isArray(saved)) return app;
+  const locked = new Map(app.filter((i) => i.locked).map((i) => [i.color, i]));
+  const out = normalizeLegend(saved).map(({ locked: _ignored, hex, ...item }) => {
+    const own = locked.get(item.color);
+    if (!own) return hex ? { ...item, hex } : item;
+    locked.delete(item.color);
+    return own.hex ? { ...item, hex: own.hex, locked: true } : { ...item, locked: true };
+  });
+  return [...out, ...locked.values()];
+}
+
+/** Hex overrides from a legend, as a `colors` map: `{ yellow: '#ffcc00' }`. */
+const legendColors = (legend) => Object.fromEntries(normalizeLegend(legend).filter((i) => i.hex).map((i) => [i.color, i.hex]));
 
 /** Only http(s), relative (`/x`, `./x`, `../x`) and in-page links: never `javascript:` or `data:`. */
 function safeUrl(value) {
@@ -167,6 +211,10 @@ const fromLocalInput = (value) => (value ? normalizeDue(new Date(value)) : null)
  *   board.update({ notes, auto });   // after your data changes
  *   board.destroy();
  *
+ * Right-click the glass for a menu of note types: the new note starts where you clicked.
+ * Right-click a note to change its type. The gear at the start of the legend edits the types
+ * (name, meaning, color) and saves them through `store.saveLegend`.
+ *
  * Two kinds of notes live together:
  *   - notes people write (`notes`): editable, a ✓ marks them done;
  *   - automatic notes your app computes (`auto`): folded corner, read-only, they go away
@@ -202,6 +250,17 @@ const DEFAULT_STRINGS = Object.freeze({
   tomorrow: 'Tomorrow',
   yesterday: 'Yesterday',
   failed: 'Could not save',
+  menuNew: 'New note here',
+  menuColor: 'Change type',
+  settings: 'Note types',
+  settingsHint: 'Each color is a type of note. Rename it, say what it means or pick another color. Notes keep their type.',
+  addType: '+ Type',
+  typeName: 'Name',
+  typeMeaning: 'Meaning',
+  typeColor: 'Color',
+  moveUp: 'Move up',
+  removeType: 'Remove type',
+  locked: 'Set by the app: rename only',
 });
 
 const DEFAULTS = {
@@ -214,6 +273,8 @@ const DEFAULTS = {
   locale: undefined,
   store: null,
   addButton: true,
+  contextMenu: true,
+  editLegend: null,
   defaultColor: null,
   gridBelow: 700,
   onError: (err) => console.error('[postit-board]', err),
@@ -240,6 +301,7 @@ function restStore(base, { headers = {}, fetch: doFetch = globalThis.fetch.bind(
     create: (draft) => call('POST', '', draft),
     update: (ref, patch) =>
       ref.key != null ? call('PUT', `/key/${encodeURIComponent(ref.key)}`, patch) : call('PATCH', `/${ref.id}`, patch),
+    saveLegend: (legend) => call('PUT', '/legend', { legend }),
   };
 }
 
@@ -250,7 +312,16 @@ function localStore(name = 'postit-board', storage = globalThis.localStorage) {
   };
   const write = (data) => storage.setItem(name, JSON.stringify(data));
   return {
-    load: () => { const d = read(); return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions }; },
+    load: () => {
+      const d = read();
+      return { notes: d.notes.filter((n) => !n.doneAt), positions: d.positions, ...(d.legend ? { legend: d.legend } : {}) };
+    },
+    saveLegend(legend) {
+      const d = read();
+      d.legend = normalizeLegend(legend);
+      write(d);
+      return { legend: d.legend };
+    },
     create(draft) {
       const d = read();
       const note = { ...normalizeNote({ ...draft, id: d.next }), createdAt: new Date().toISOString() };
@@ -262,7 +333,9 @@ function localStore(name = 'postit-board', storage = globalThis.localStorage) {
     update(ref, patch) {
       const d = read();
       if (ref.key != null) {
-        d.positions[ref.key] = { x: patch.x, y: patch.y, z: patch.z };
+        const pos = { ...d.positions[ref.key] };
+        for (const k of ['x', 'y', 'z']) if (patch[k] !== undefined) pos[k] = patch[k];
+        d.positions[ref.key] = pos;
         write(d);
         return { key: ref.key, ...d.positions[ref.key] };
       }
@@ -282,7 +355,16 @@ function createBoard(root, options = {}) {
   const id = `pb${++uid}`;
   let opts = { ...DEFAULTS, ...options };
   let t = { ...DEFAULT_STRINGS, ...opts.strings };
-  let colors = { ...DEFAULT_COLORS, ...opts.colors };
+  let appLegend = opts.legend; // what the app ships; opts.legend is that plus what people saved
+  let savedLegend = null;
+  let colors;
+  const baseColors = () => ({ ...DEFAULT_COLORS, ...opts.colors });
+  function applyLegend() {
+    opts.legend = mergeLegend(appLegend, savedLegend);
+    colors = { ...baseColors(), ...legendColors(opts.legend) };
+  }
+  applyLegend();
+  const canEditLegend = () => opts.editLegend ?? Boolean(opts.store?.saveLegend);
   let notes = [];
   let auto = [];
   let rawAuto = [];
@@ -298,10 +380,14 @@ function createBoard(root, options = {}) {
     </div>
     <div class="pb-glass" role="list"></div>
     <footer class="pb-legend" aria-label="${escapeHtml(t.legend)}"></footer>
+    <div class="pb-menu" role="menu" hidden></div>
     <dialog class="pb-dialog" aria-labelledby="${id}-h"></dialog>`;
   const glass = root.querySelector('.pb-glass');
   const legendEl = root.querySelector('.pb-legend');
+  const menu = root.querySelector('.pb-menu');
   const dialog = root.querySelector('.pb-dialog');
+  let menuAt = null; // { x, y } on the glass, or null in the phone grid
+  let menuNote = null;
 
   const isGrid = () => root.clientWidth > 0 && root.clientWidth < opts.gridBelow;
   const all = () => [...auto, ...notes];
@@ -377,7 +463,10 @@ function createBoard(root, options = {}) {
   }
 
   function renderLegend() {
-    if (!opts.legend.length) { legendEl.hidden = true; return; }
+    const gear = canEditLegend()
+      ? `<button type="button" class="pb-gear" data-pb="settings" title="${escapeHtml(t.settings)}" aria-label="${escapeHtml(t.settings)}">⚙</button>`
+      : '';
+    if (!opts.legend.length && !gear) { legendEl.hidden = true; return; }
     legendEl.hidden = false;
     const count = (c) => all().filter((n) => n.color === c).length;
     legendEl.innerHTML = opts.legend.map((item) => {
@@ -387,7 +476,148 @@ function createBoard(root, options = {}) {
         <span class="pb-swatch" style="--pb-note:${escapeHtml(colors[item.color] || item.color)}"></span>
         <span class="pb-key-label">${escapeHtml(item.label)}</span><span class="pb-count">${count(item.color)}</span>
       </button>`;
-    }).join('');
+    }).join('') + gear;
+  }
+
+  /** The types offered when creating or recoloring: the legend, or every color without one. */
+  const choices = () => (opts.legend.length ? opts.legend : Object.keys(colors).map((c) => ({ color: c, label: c })));
+  const swatchOf = (c) => escapeHtml(colors[c] || c);
+
+  /** Where a click lands on the glass, as a note position: its top-left corner, kept inside. */
+  function pointOnGlass(ev) {
+    if (isGrid()) return null;
+    const box = glass.getBoundingClientRect();
+    const noteWidth = Math.min(220, box.width * 0.23);
+    return {
+      x: Math.min(Math.max(0, (ev.clientX - box.left) / box.width), Math.max(0, 1 - noteWidth / box.width)),
+      y: Math.max(0, Math.round(ev.clientY - box.top)),
+    };
+  }
+
+  /* ---------- the right-click menu ---------- */
+  function openMenu(ev, note) {
+    menuNote = note || null;
+    menuAt = note ? null : pointOnGlass(ev);
+    const action = note ? 'menu-color' : 'menu-new';
+    const items = choices().map((c) => `<button type="button" role="menuitem" class="pb-menu-item" data-pb="${action}" data-color="${escapeHtml(c.color)}"${note && note.color === c.color ? ' aria-current="true"' : ''}>
+        <span class="pb-swatch" style="--pb-note:${swatchOf(c.color)}"></span><span class="pb-menu-label">${escapeHtml(c.label)}</span>
+        ${c.description ? `<small>${escapeHtml(c.description)}</small>` : ''}</button>`).join('');
+    const extra = note
+      ? `<hr><button type="button" role="menuitem" class="pb-menu-item" data-pb="menu-edit"><span class="pb-menu-label">✎ ${escapeHtml(t.edit)}</span></button>
+         <button type="button" role="menuitem" class="pb-menu-item" data-pb="menu-done"><span class="pb-menu-label">✓ ${escapeHtml(t.done)}</span></button>`
+      : '';
+    menu.innerHTML = `<p class="pb-menu-h">${escapeHtml(note ? t.menuColor : t.menuNew)}</p>${items}${extra}`;
+    menu.hidden = false;
+    // fixed to the viewport, flipped when it would leave the screen
+    const w = menu.offsetWidth;
+    const h = menu.offsetHeight;
+    menu.style.left = `${Math.max(4, ev.clientX + w > innerWidth ? ev.clientX - w : ev.clientX)}px`;
+    menu.style.top = `${Math.max(4, ev.clientY + h > innerHeight ? ev.clientY - h : ev.clientY)}px`;
+    (menu.querySelector('[aria-current]') || menu.querySelector('.pb-menu-item'))?.focus();
+  }
+
+  function closeMenu() {
+    if (menu.hidden) return;
+    menu.hidden = true;
+    menu.innerHTML = '';
+    menuNote = null;
+  }
+
+  function onContextMenu(ev) {
+    if (!opts.contextMenu || ev.shiftKey) return; // Shift + right-click keeps the browser's own menu
+    if (ev.target.closest('a,input,textarea')) return;
+    const el = ev.target.closest('.pb-note');
+    const note = el && find(el.dataset.ref);
+    if (note?.auto) return;
+    ev.preventDefault();
+    openMenu(ev, note);
+  }
+
+  function onMenuKey(ev) {
+    if (ev.key === 'Escape') { ev.preventDefault(); closeMenu(); return; }
+    if (ev.key !== 'ArrowDown' && ev.key !== 'ArrowUp') return;
+    ev.preventDefault();
+    const items = [...menu.querySelectorAll('.pb-menu-item')];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (ev.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length]?.focus();
+  }
+
+  const onOutside = (ev) => { if (!menu.hidden && !menu.contains(ev.target)) closeMenu(); };
+
+  /* ---------- the note types (gear at the end of the legend) ---------- */
+  function typeRow(item) {
+    const hex = colors[item.color] || '#fde68a';
+    const lock = item.locked ? ` disabled title="${escapeHtml(t.locked)}"` : '';
+    return `<li class="pb-type" data-color="${escapeHtml(item.color)}"${item.locked ? ' data-locked' : ''}>
+      <input type="color" name="hex" value="${escapeHtml(hex)}" aria-label="${escapeHtml(t.typeColor)}"${lock}>
+      <input name="label" maxlength="40" value="${escapeHtml(item.label)}" aria-label="${escapeHtml(t.typeName)}" placeholder="${escapeHtml(t.typeName)}" required>
+      <input name="description" maxlength="160" value="${escapeHtml(item.description)}" aria-label="${escapeHtml(t.typeMeaning)}" placeholder="${escapeHtml(t.typeMeaning)}">
+      <button type="button" class="pb-icon" data-pb="type-up" title="${escapeHtml(t.moveUp)}" aria-label="${escapeHtml(t.moveUp)}">↑</button>
+      ${item.locked
+    ? `<span class="pb-lock" title="${escapeHtml(t.locked)}" aria-label="${escapeHtml(t.locked)}">🔒</span>`
+    : `<button type="button" class="pb-icon" data-pb="type-remove" title="${escapeHtml(t.removeType)}" aria-label="${escapeHtml(t.removeType)}">✕</button>`}
+    </li>`;
+  }
+
+  /** A color key for a new type: a built-in color nobody uses yet, else c-1, c-2… */
+  function freeKey(used) {
+    const free = Object.keys(DEFAULT_COLORS).find((c) => !used.has(c));
+    if (free) return free;
+    let n = 1;
+    while (used.has(`c-${n}`)) n += 1;
+    return `c-${n}`;
+  }
+
+  function openSettings() {
+    closeMenu();
+    dialog.innerHTML = `<form method="dialog" class="pb-form pb-settings">
+      <h2 id="${id}-h">${escapeHtml(t.settings)}</h2>
+      <p class="pb-settings-hint">${escapeHtml(t.settingsHint)}</p>
+      <ol class="pb-types">${opts.legend.map(typeRow).join('')}</ol>
+      <div class="pb-actions">
+        <button type="button" class="pb-btn" data-pb="type-add">${escapeHtml(t.addType)}</button>
+        <span class="pb-spacer"></span>
+        <button type="button" class="pb-btn" data-pb="cancel">${escapeHtml(t.cancel)}</button>
+        <button type="submit" class="pb-btn pb-btn--primary">${escapeHtml(t.save)}</button>
+      </div></form>`;
+    const form = dialog.querySelector('form');
+    const list = form.querySelector('.pb-types');
+    form.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('[data-pb]');
+      if (!btn) return;
+      const row = btn.closest('.pb-type');
+      const action = btn.dataset.pb;
+      if (action === 'cancel') dialog.close();
+      if (action === 'type-remove') row.remove();
+      if (action === 'type-up' && row.previousElementSibling) row.previousElementSibling.before(row);
+      if (action === 'type-add') {
+        const key = freeKey(new Set([...list.querySelectorAll('.pb-type')].map((r) => r.dataset.color)));
+        list.insertAdjacentHTML('beforeend', typeRow({ color: key, label: '' }));
+        list.lastElementChild.querySelector('[name=label]').focus();
+      }
+    });
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const base = baseColors();
+      const legend = normalizeLegend([...list.querySelectorAll('.pb-type')].map((row) => {
+        const hex = row.querySelector('[name=hex]').value.toLowerCase();
+        const own = (base[row.dataset.color] || '').toLowerCase();
+        return {
+          color: row.dataset.color,
+          label: row.querySelector('[name=label]').value,
+          description: row.querySelector('[name=description]').value,
+          hex: hex && hex !== own ? hex : undefined,
+          locked: row.hasAttribute('data-locked'),
+        };
+      }));
+      dialog.close();
+      savedLegend = legend;
+      applyLegend();
+      render();
+      try { await opts.store?.saveLegend?.(legend); } catch (err) { fail(err); }
+    });
+    dialog.showModal();
+    form.querySelector('[name=label]')?.focus();
   }
 
   async function save(note, patch) {
@@ -400,15 +630,16 @@ function createBoard(root, options = {}) {
 
   /* ---------- the edit dialog ---------- */
   function openEditor(note, at) {
-    const choices = opts.legend.length ? opts.legend : Object.keys(colors).map((c) => ({ color: c, label: c }));
-    const current = note?.color || at?.color || opts.defaultColor || (choices.some((c) => c.color === 'yellow') ? 'yellow' : choices[0]?.color) || 'yellow';
+    closeMenu();
+    const types = choices();
+    const current = note?.color || at?.color || opts.defaultColor || (types.some((c) => c.color === 'yellow') ? 'yellow' : types[0]?.color) || 'yellow';
     dialog.innerHTML = `<form method="dialog" class="pb-form">
       <h2 id="${id}-h">${escapeHtml(note ? t.editNote : t.newNote)}</h2>
       <label>${escapeHtml(t.title)}<input name="title" maxlength="120" value="${escapeHtml(note?.title)}"></label>
       <label>${escapeHtml(t.text)}<textarea name="text" rows="4" maxlength="2000">${escapeHtml(note?.text)}</textarea></label>
-      <fieldset class="pb-colors"><legend>${escapeHtml(t.color)}</legend>${choices.map((c) => `
+      <fieldset class="pb-colors"><legend>${escapeHtml(t.color)}</legend>${types.map((c) => `
         <label class="pb-choice" title="${escapeHtml(c.description || c.label)}"><input type="radio" name="color" value="${escapeHtml(c.color)}"${c.color === current ? ' checked' : ''}>
-          <span class="pb-swatch" style="--pb-note:${escapeHtml(colors[c.color] || c.color)}"></span>${escapeHtml(c.label)}</label>`).join('')}
+          <span class="pb-swatch" style="--pb-note:${swatchOf(c.color)}"></span>${escapeHtml(c.label)}</label>`).join('')}
       </fieldset>
       <div class="pb-row">
         <label>${escapeHtml(t.due)}<input name="due" type="datetime-local" value="${escapeHtml(toLocalInput(note?.due))}"></label>
@@ -470,6 +701,26 @@ function createBoard(root, options = {}) {
     if (!btn || !root.contains(btn)) return;
     const action = btn.dataset.pb;
     if (action === 'add') return openEditor(null);
+    if (action === 'settings') return openSettings();
+    if (action === 'menu-new') {
+      const at = { ...menuAt, color: btn.dataset.color };
+      closeMenu();
+      return openEditor(null, at);
+    }
+    if (action.startsWith('menu-')) {
+      const target = menuNote;
+      closeMenu();
+      if (!target) return;
+      if (action === 'menu-edit') return openEditor(target);
+      if (action === 'menu-done') return finish(target);
+      if (action === 'menu-color' && target.color !== btn.dataset.color) {
+        target.color = btn.dataset.color;
+        target.z = topZ() + 1;
+        render();
+        save(target, { color: target.color, z: target.z });
+      }
+      return;
+    }
     if (action === 'filter') {
       const c = btn.dataset.color;
       if (hidden.has(c)) hidden.delete(c); else hidden.add(c);
@@ -479,18 +730,19 @@ function createBoard(root, options = {}) {
     const note = el && find(el.dataset.ref);
     if (!note) return;
     if (action === 'edit') return openEditor(note);
-    if (action === 'done') {
-      el.classList.add('pb-note--leaving');
-      notes = notes.filter((n) => n !== note);
-      setTimeout(render, 180);
-      save(note, { done: true });
-    }
+    if (action === 'done') finish(note);
+  }
+
+  function finish(note) {
+    glass.querySelector(`[data-ref="${CSS.escape(refId(refOf(note)))}"]`)?.classList.add('pb-note--leaving');
+    notes = notes.filter((n) => n !== note);
+    setTimeout(render, 180);
+    save(note, { done: true });
   }
 
   function onDblClick(ev) {
     if (ev.target !== glass || isGrid()) return;
-    const box = glass.getBoundingClientRect();
-    openEditor(null, { x: Math.max(0, Math.min(0.8, (ev.clientX - box.left) / box.width - 0.05)), y: Math.max(0, Math.round(ev.clientY - box.top - 20)) });
+    openEditor(null, pointOnGlass(ev));
   }
 
   function onPointerDown(ev) {
@@ -524,7 +776,8 @@ function createBoard(root, options = {}) {
     drag = null;
     el.classList.remove('pb-note--dragging');
     fitHeight();
-    save(note, moved ? { x: note.x, y: note.y, z: note.z } : { z: note.z });
+    // the note touched last stays on top, also after a reload
+    save(note, moved || note.auto ? { x: note.x, y: note.y, z: note.z } : { z: note.z });
   }
 
   let keyTimer = null;
@@ -554,6 +807,12 @@ function createBoard(root, options = {}) {
   glass.addEventListener('pointerup', onPointerUp);
   glass.addEventListener('pointercancel', onPointerUp);
   root.addEventListener('keydown', onKeyDown);
+  glass.addEventListener('contextmenu', onContextMenu);
+  menu.addEventListener('keydown', onMenuKey);
+  document.addEventListener('pointerdown', onOutside, true);
+  addEventListener('scroll', closeMenu, true);
+  addEventListener('resize', closeMenu);
+  addEventListener('blur', closeMenu);
   // due chips move from "Tomorrow" to "Today" to overdue without a reload
   const ticker = setInterval(() => { if (!drag && !dialog.open && all().some((n) => n.due)) render(); }, 60_000);
 
@@ -563,25 +822,38 @@ function createBoard(root, options = {}) {
   return {
     /** Replace the data (any of notes, auto, positions) and redraw. */
     update(data = {}) { setData(data); if (!drag) render(); },
-    /** Load everything from `store.load()` (shape `{ notes, positions }`). */
+    /** Load everything from `store.load()` (shape `{ notes, positions, legend? }`). */
     async reload() {
       if (!opts.store?.load) return;
-      try { const data = await opts.store.load(); setData({ notes: data.notes, positions: data.positions }); render(); } catch (err) { fail(err); }
+      try {
+        const data = await opts.store.load();
+        if (data.legend) { savedLegend = data.legend; applyLegend(); }
+        setData({ notes: data.notes, positions: data.positions });
+        render();
+      } catch (err) { fail(err); }
     },
     /** Change options (legend, strings, colors…) after mounting. */
     configure(next = {}) {
+      if (next.legend) appLegend = next.legend;
       opts = { ...opts, ...next };
       t = { ...DEFAULT_STRINGS, ...opts.strings };
-      colors = { ...DEFAULT_COLORS, ...opts.colors };
+      applyLegend();
       render();
     },
     openEditor: (draft) => openEditor(null, draft),
+    openSettings: () => openSettings(),
+    /** The legend in use: what the app shipped plus what people changed with the gear. */
+    get legend() { return opts.legend.map((i) => ({ ...i })); },
     get notes() { return notes.map((n) => ({ ...n })); },
     destroy() {
       clearInterval(ticker);
       clearTimeout(keyTimer);
       root.removeEventListener('click', onClick);
       root.removeEventListener('keydown', onKeyDown);
+      document.removeEventListener('pointerdown', onOutside, true);
+      removeEventListener('scroll', closeMenu, true);
+      removeEventListener('resize', closeMenu);
+      removeEventListener('blur', closeMenu);
       root.classList.remove('pb');
       root.innerHTML = '';
     },
@@ -589,5 +861,5 @@ function createBoard(root, options = {}) {
 }
 
 
-global.PostitBoard = { DEFAULT_STRINGS, restStore, localStore, createBoard, DEFAULT_COLORS, LIMITS, isColorKey, safeUrl, escapeHtml, linkify, tilt, normalizeDue, normalizeNote, refOf, refId, autoPlace, withPositions, boardHeight, dueStatus, formatDue, toLocalInput, fromLocalInput };
+global.PostitBoard = { DEFAULT_STRINGS, restStore, localStore, createBoard, DEFAULT_COLORS, LIMITS, isColorKey, isHex, normalizeLegend, mergeLegend, legendColors, safeUrl, escapeHtml, linkify, tilt, normalizeDue, normalizeNote, refOf, refId, autoPlace, withPositions, boardHeight, dueStatus, formatDue, toLocalInput, fromLocalInput };
 })(typeof globalThis !== 'undefined' ? globalThis : window);

@@ -8,10 +8,11 @@
  *   store.create({ text: 'Buy filament', color: 'green' });
  *   store.update({ id: 3 }, { done: true });
  *   store.update({ key: 'auto:dry' }, { x: 0.5, y: 120 });   // position of an automatic note
+ *   store.saveLegend([{ color: 'green', label: 'Print' }]);   // note types edited with the gear
  *
  * Nothing is ever deleted: done and removed notes keep their row with a timestamp.
  */
-import { LIMITS, isColorKey, normalizeDue, safeUrl } from '../src/core.js';
+import { LIMITS, isColorKey, normalizeDue, normalizeLegend, safeUrl } from '../src/core.js';
 
 const COLUMNS = `
   id INTEGER PRIMARY KEY,
@@ -100,6 +101,7 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(table)) throw new Error('invalid table name');
   db.exec(`CREATE TABLE IF NOT EXISTS ${table} (${COLUMNS})`);
   db.exec(`CREATE INDEX IF NOT EXISTS ${table}_open ON ${table}(done_at, removed_at)`);
+  db.exec(`CREATE TABLE IF NOT EXISTS ${table}_settings (name TEXT PRIMARY KEY, value TEXT NOT NULL, updated_at TEXT NOT NULL)`);
 
   const one = (sql, ...args) => db.prepare(sql).get(...args);
   const many = (sql, ...args) => db.prepare(sql).all(...args);
@@ -120,7 +122,18 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
       const notes = many(`SELECT * FROM ${table} WHERE key IS NULL AND done_at IS NULL AND removed_at IS NULL ORDER BY id`).map(fromRow);
       const positions = {};
       for (const r of many(`SELECT key, x, y, z FROM ${table} WHERE key IS NOT NULL`)) positions[r.key] = { x: r.x, y: r.y, z: r.z };
-      return { notes, positions };
+      const legend = one(`SELECT value FROM ${table}_settings WHERE name = 'legend'`);
+      return legend ? { notes, positions, legend: JSON.parse(legend.value) } : { notes, positions };
+    },
+
+    /** The note types people edited with the gear. The board merges them over the app's legend. */
+    saveLegend(legend) {
+      if (!Array.isArray(legend)) throw new ValidationError('legend must be a list');
+      const clean = normalizeLegend(legend);
+      run(`INSERT INTO ${table}_settings (name, value, updated_at) VALUES ('legend', ?, ?)
+        ON CONFLICT(name) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at`, JSON.stringify(clean), now());
+      onChange({ type: 'legend', legend: clean });
+      return { legend: clean };
     },
 
     get(id) {

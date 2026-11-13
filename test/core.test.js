@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, linkify, normalizeNote,
+  autoPlace, boardHeight, dueStatus, escapeHtml, formatDue, fromLocalInput, legendColors, linkify, mergeLegend, normalizeLegend, normalizeNote,
   safeUrl, tilt, toLocalInput, withPositions,
 } from '../src/core.js';
 
@@ -69,4 +69,42 @@ test('datetime-local round trip keeps the minute', () => {
 test('tilt is stable and small', () => {
   assert.equal(tilt('id:1'), tilt('id:1'));
   for (const s of ['a', 'id:2', 'key:auto:x']) assert.ok(Math.abs(tilt(s)) <= 2.1);
+});
+
+test('normalizeLegend drops bad entries, repeated colors and anything past the limit', () => {
+  const out = normalizeLegend([
+    { color: 'green', label: '  Print  ', description: 'x'.repeat(300), hex: '#ABCDEF', locked: true },
+    { color: 'green', label: 'again' },
+    { color: 'Bad Key', label: 'no' },
+    { color: 'c-1', label: '', hex: 'red' },
+    null,
+  ]);
+  assert.deepEqual(out, [
+    { color: 'green', label: 'Print', description: 'x'.repeat(160), hex: '#abcdef', locked: true },
+    { color: 'c-1', label: 'c-1' },
+  ]);
+  assert.equal(normalizeLegend(Array.from({ length: 40 }, (_, i) => ({ color: `c-${i}`, label: 'n' }))).length, 24);
+  assert.deepEqual(normalizeLegend('nope'), []);
+});
+
+test('mergeLegend: saved order, names and colors win; app types stay and keep their color', () => {
+  const app = [
+    { color: 'pink', label: 'Broken', locked: true },
+    { color: 'yellow', label: 'Notes' },
+    { color: 'blue', label: 'Someday' },
+  ];
+  assert.deepEqual(mergeLegend(app, null), normalizeLegend(app));
+  const saved = [
+    { color: 'yellow', label: 'Mine', hex: '#ffcc00' },
+    { color: 'pink', label: 'Fix now', hex: '#000000', locked: false },
+    { color: 'c-1', label: 'Calls', hex: '#123456', locked: true },
+  ];
+  assert.deepEqual(mergeLegend(app, saved), [
+    { color: 'yellow', label: 'Mine', hex: '#ffcc00' },
+    { color: 'pink', label: 'Fix now', locked: true },
+    { color: 'c-1', label: 'Calls', hex: '#123456' },
+  ]);
+  // an app type the saved legend lost comes back at the end
+  assert.deepEqual(mergeLegend(app, [{ color: 'blue', label: 'Later' }]).map((i) => i.color), ['blue', 'pink']);
+  assert.deepEqual(legendColors(saved), { yellow: '#ffcc00', pink: '#000000', 'c-1': '#123456' });
 });

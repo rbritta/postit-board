@@ -28,6 +28,9 @@ test('create, edit, finish and remove a note; positions of automatic notes by ke
   store.update({ id: b.id }, { removed: true });
   data = store.load();
   assert.equal(data.notes.length, 0);
+  assert.equal(data.legend, undefined, 'no legend until someone edits the types');
+  store.update({ key: 'auto:disk' }, { z: 9 });
+  assert.deepEqual(store.load().positions['auto:disk'], { x: 0.7, y: 300, z: 9 }, 'raising a note keeps where it is');
   assert.deepEqual(changes, ['create', 'create', 'update', 'done', 'remove']);
   assert.throws(() => store.update({ id: b.id }, { text: 'x' }), { name: 'NotFoundError' });
 });
@@ -94,6 +97,10 @@ test('restStore and the HTTP handler speak the same routes', async () => {
     assert.deepEqual(data.positions['auto:x y'], { x: 0.5, y: 10, z: 0 });
     await assert.rejects(client.create({ text: 'x', link: 'javascript:x' }), /link/);
     await assert.rejects(client.update({ id: 999 }, { text: 'x' }), /not found/);
+    const saved = await client.saveLegend([{ color: 'green', label: 'Print', hex: '#00ff00' }, { color: 'BAD' }]);
+    assert.deepEqual(saved.legend, [{ color: 'green', label: 'Print', hex: '#00ff00' }]);
+    assert.deepEqual((await client.load()).legend, saved.legend);
+    await assert.rejects(fetch(`${base}/api/postits/legend`, { method: 'PUT', body: '{"legend":"x"}' }).then((r) => r.json()).then((d) => { throw new Error(d.error); }), /legend must be a list/);
     assert.equal((await fetch(`${base}/other`)).status, 418);
     assert.equal((await fetch(`${base}/api/postits/abc`, { method: 'DELETE' })).status, 404);
   } finally {

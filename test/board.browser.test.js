@@ -105,6 +105,109 @@ test('create through the dialog, escape what was typed, then finish it', async (
   await ctx.close();
 });
 
+test('right-click on the glass: pick a type, the note starts exactly where you clicked', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx, errors } = await page();
+  const glass = await p.locator('.pb-glass').boundingBox();
+  // an empty spot of the glass, away from the notes
+  const at = await p.evaluate(() => {
+    const g = document.querySelector('.pb-glass');
+    const b = g.getBoundingClientRect();
+    for (let y = b.bottom - 30; y > b.top; y -= 20) {
+      for (let x = b.left + 20; x < b.left + b.width * 0.6; x += 20) if (document.elementFromPoint(x, y) === g) return { x, y };
+    }
+    return null;
+  });
+  await p.mouse.click(at.x, at.y, { button: 'right' });
+  const items = p.locator('.pb-menu [data-pb=menu-new]');
+  assert.equal(await items.count(), 7, 'one item per type');
+  assert.match(await items.nth(0).textContent(), /Broken[\s\S]*Something failed/, 'with its meaning');
+  await p.click('.pb-menu [data-pb=menu-new][data-color=green]');
+  assert.ok(await p.locator('.pb-menu').isHidden());
+  assert.ok(await p.locator('.pb-dialog [name=color][value=green]').isChecked());
+  await p.fill('.pb-dialog [name=text]', 'Right here');
+  await p.click('.pb-dialog [type=submit]');
+  const note = p.locator('.pb-note', { hasText: 'Right here' });
+  await note.waitFor();
+  const pos = await note.evaluate((el) => ({ x: el.offsetLeft, y: el.offsetTop }));
+  assert.ok(Math.abs(glass.x + pos.x - at.x) <= 2 && Math.abs(glass.y + pos.y - at.y) <= 2, JSON.stringify(pos));
+  const saved = await p.evaluate(() => JSON.parse(localStorage.getItem('postit-board-demo')).notes.find((n) => n.text === 'Right here'));
+  assert.equal(saved.color, 'green');
+  assert.equal(saved.y, Math.round(at.y - glass.y));
+  // Escape and a click outside close the menu without creating anything
+  await p.mouse.click(at.x, at.y + 20, { button: 'right' });
+  await p.keyboard.press('Escape');
+  assert.ok(await p.locator('.pb-menu').isHidden());
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
+test('right-click on a note changes its type; app notes keep the browser menu', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx } = await page();
+  const note = p.locator('.pb-note:not(.pb-note--auto)').first();
+  const ref = await note.getAttribute('data-ref');
+  await note.click({ button: 'right', position: { x: 60, y: 80 } });
+  assert.equal(await p.locator('.pb-menu [data-pb=menu-color]').count(), 7);
+  assert.equal(await p.locator('.pb-menu [data-pb=menu-edit]').count(), 1);
+  await p.click('.pb-menu [data-pb=menu-color][data-color=teal]');
+  assert.equal(await p.getAttribute(`[data-ref="${ref}"]`, 'data-color'), 'teal');
+  await p.locator('.pb-note--auto').first().click({ button: 'right', position: { x: 60, y: 80 } });
+  assert.ok(await p.locator('.pb-menu').isHidden());
+  await p.reload();
+  await p.waitForSelector('.pb-note');
+  assert.equal(await p.getAttribute(`[data-ref="${ref}"]`, 'data-color'), 'teal');
+  await ctx.close();
+});
+
+test('the note touched last stays on top, also after a reload', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx } = await page();
+  const notes = p.locator('.pb-note');
+  const z = () => notes.evaluateAll((els) => els.map((el) => [el.dataset.ref, Number(el.style.getPropertyValue('--pb-z'))]));
+  for (const i of [0, 7]) {
+    const box = await notes.nth(i).boundingBox();
+    await p.mouse.click(box.x + 50, box.y + 70);
+  }
+  await p.waitForTimeout(100);
+  const before = await z();
+  const top = before.reduce((a, b) => (b[1] > a[1] ? b : a));
+  await p.reload();
+  await p.waitForSelector('.pb-note');
+  const after = await z();
+  assert.equal(after.reduce((a, b) => (b[1] > a[1] ? b : a))[0], top[0]);
+  await ctx.close();
+});
+
+test('the gear edits the types: rename, recolor, add, remove; app types only rename', async (t) => {
+  if (!browser) return t.skip('no browser');
+  const { p, ctx, errors } = await page();
+  await p.click('.pb-legend [data-pb=settings]');
+  const rows = p.locator('.pb-dialog .pb-type');
+  assert.equal(await rows.count(), 7);
+  assert.ok(await rows.nth(0).locator('[name=hex]').isDisabled(), 'Broken is set by the app');
+  assert.equal(await rows.nth(0).locator('[data-pb=type-remove]').count(), 0);
+  await rows.nth(2).locator('[name=label]').fill('Mine');
+  await rows.nth(2).locator('[name=hex]').fill('#ffcc00');
+  await rows.nth(5).locator('[data-pb=type-remove]').click();
+  await p.click('.pb-dialog [data-pb=type-add]');
+  await rows.last().locator('[name=label]').fill('Calls');
+  await rows.last().locator('[name=description]').fill('People to call back');
+  await rows.last().locator('[data-pb=type-up]').click();
+  await p.click('.pb-dialog [type=submit]');
+  const keys = () => p.locator('.pb-legend .pb-key').evaluateAll((els) => els.map((el) => el.querySelector('.pb-key-label').textContent));
+  assert.deepEqual(await keys(), ['Broken', 'Attention', 'Mine', 'Routine', 'Numbers', 'Calls', 'Someday']);
+  const yellow = await p.locator('.pb-note[data-color=yellow]').first().evaluate((el) => getComputedStyle(el).backgroundColor);
+  assert.equal(yellow, 'rgb(255, 204, 0)', 'notes of the type take its new color');
+  await p.reload();
+  await p.waitForSelector('.pb-note');
+  assert.deepEqual(await keys(), ['Broken', 'Attention', 'Mine', 'Routine', 'Numbers', 'Calls', 'Someday']);
+  await p.mouse.click(300, 700, { button: 'right' });
+  assert.match(await p.locator('.pb-menu').textContent(), /Calls[\s\S]*People to call back/);
+  assert.deepEqual(errors, []);
+  await ctx.close();
+});
+
 test('on a phone the board is a grid without horizontal scroll', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page(360);

@@ -15,11 +15,55 @@ export const DEFAULT_COLORS = Object.freeze({
   gray: '#e5e7eb',
 });
 
-export const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32 });
+export const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32, label: 40, description: 160, legend: 24 });
 
 const COLOR_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 
 export const isColorKey = (value) => typeof value === 'string' && COLOR_KEY.test(value);
+export const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
+
+/**
+ * A legend as the board and the stores keep it: `[{ color, label, description?, hex?, locked? }]`.
+ * `color` is the key notes carry; `hex` repaints that key; `locked` marks a type the app owns
+ * (its color can't change and it can't be removed, only renamed). Bad entries are dropped.
+ */
+export function normalizeLegend(list) {
+  if (!Array.isArray(list)) return [];
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    if (!item || !isColorKey(item.color) || seen.has(item.color)) continue;
+    seen.add(item.color);
+    const entry = { color: item.color, label: text(item.label, LIMITS.label).trim() || item.color };
+    const description = text(item.description, LIMITS.description).trim();
+    if (description) entry.description = description;
+    if (isHex(item.hex)) entry.hex = item.hex.toLowerCase();
+    if (item.locked === true) entry.locked = true;
+    out.push(entry);
+    if (out.length >= LIMITS.legend) break;
+  }
+  return out;
+}
+
+/**
+ * The legend people saved, on top of the one the app ships. Saved order, names and colors
+ * win; the app's locked types always stay (renamed if they were), and keep their color.
+ */
+export function mergeLegend(appLegend, saved) {
+  const app = normalizeLegend(appLegend);
+  if (!Array.isArray(saved)) return app;
+  const locked = new Map(app.filter((i) => i.locked).map((i) => [i.color, i]));
+  const out = normalizeLegend(saved).map(({ locked: _ignored, hex, ...item }) => {
+    const own = locked.get(item.color);
+    if (!own) return hex ? { ...item, hex } : item;
+    locked.delete(item.color);
+    return own.hex ? { ...item, hex: own.hex, locked: true } : { ...item, locked: true };
+  });
+  return [...out, ...locked.values()];
+}
+
+/** Hex overrides from a legend, as a `colors` map: `{ yellow: '#ffcc00' }`. */
+export const legendColors = (legend) => Object.fromEntries(normalizeLegend(legend).filter((i) => i.hex).map((i) => [i.color, i.hex]));
 
 /** Only http(s), relative (`/x`, `./x`, `../x`) and in-page links: never `javascript:` or `data:`. */
 export function safeUrl(value) {
