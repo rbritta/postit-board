@@ -8,13 +8,17 @@
  *     ...your other routes
  *   });
  *
- *   GET    /api/postits              -> { notes, positions, legend?, size?, view? }
+ *   GET    /api/postits              -> { notes, positions, legend?, size?, view?, lanes? }
+ *   GET    /api/postits/archived     -> { notes } archived, the last archived first
  *   POST   /api/postits              -> the new note
- *   PATCH  /api/postits/:id          -> the note (fields, { done: true } or { removed: true })
- *   PUT    /api/postits/key/:key     -> position of an automatic note { x, y, z }
+ *   PATCH  /api/postits/:id          -> the note (fields, { done: true } archives, { done: false } restores,
+ *                                       { removed: true } deletes for good)
+ *   PUT    /api/postits/key/:key     -> position of an automatic note { x, y, z, lanePos?, dismissed?, dismissedAt? }
+ *                                       ({ dismissed: signature } dismisses it, { dismissed: null } brings it back)
  *   PUT    /api/postits/legend       -> { legend } edited with the gear
+ *   PUT    /api/postits/lanes        -> { lanes } the lanes set in the gear
  *   PUT    /api/postits/size         -> { size } chosen by dragging the corners
- *   PUT    /api/postits/view         -> { view } how cut text opens (gear)
+ *   PUT    /api/postits/view         -> { view } how cut text opens, the Archive box (gear)
  *
  * Bodies are JSON objects of at most 64 kB. Authentication and CSRF are yours: run your checks
  * before calling `handle`.
@@ -80,7 +84,9 @@ export function createHttpHandler(store, { prefix = '/api/postits' } = {}) {
     try {
       if (rest === '' && req.method === 'GET') return send(res, 200, await store.load()), true;
       if (rest === '' && req.method === 'POST') return send(res, 201, await store.create(await readJson(req))), true;
+      if (rest === '/archived' && req.method === 'GET' && store.archived) return send(res, 200, await store.archived()), true;
       if (rest === '/legend' && req.method === 'PUT' && store.saveLegend) return send(res, 200, await store.saveLegend((await readJson(req)).legend)), true;
+      if (rest === '/lanes' && req.method === 'PUT' && store.saveLanes) return send(res, 200, await store.saveLanes((await readJson(req)).lanes)), true;
       if (rest === '/size' && req.method === 'PUT' && store.saveSize) return send(res, 200, await store.saveSize((await readJson(req)).size)), true;
       if (rest === '/view' && req.method === 'PUT' && store.saveView) return send(res, 200, await store.saveView((await readJson(req)).view)), true;
       let m = rest.match(/^\/(\d+)$/);

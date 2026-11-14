@@ -69,6 +69,10 @@ const settle = (p) => p.evaluate(async () => {
 
 const dialogClosed = (p) => p.waitForFunction(() => !document.querySelector('.pb-dialog').open);
 
+/** The right-click menu (its submenu is another .pb-menu). */
+const MENU = '.pb-menu:not(.pb-menu--sub)';
+const SUB = '.pb-menu--sub';
+
 /** The keyframes of the first animation running on an element: `[{ height: '80px' }, …]`. */
 const keyframes = (locator) => locator.evaluate((el) => el.getAnimations()[0]?.effect.getKeyframes() ?? null);
 
@@ -91,7 +95,7 @@ test('renders notes, legend counts and due chips', async (t) => {
   await ctx.close();
 });
 
-test('due times are written in the browser\'s language unless the app sets locale', async (t) => {
+test('due times follow the browser\'s language, zone and clock unless the app sets locale, timeZone or hour12', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx, errors } = await page(1200, { locale: 'pt-BR' });
   await p.clock.setFixedTime(new Date(2026, 10, 13, 9, 0));
@@ -99,7 +103,13 @@ test('due times are written in the browser\'s language unless the app sets local
   await mount(p, { notes: [{ id: 1, title: 'Call', text: 'x', due }] });
   assert.match(await p.textContent('.pb-due'), /15:30/, 'a 24-hour clock, as the browser speaks');
   await mount(p, { locale: 'en-US', notes: [{ id: 1, title: 'Call', text: 'x', due }] });
-  assert.match(await p.textContent('.pb-due'), /03:30 PM/);
+  assert.match(await p.textContent('.pb-due'), /3:30\sPM/);
+  // the app can also pin the clock and the zone, and change them later
+  await p.evaluate(() => window.B.configure({ hour12: false }));
+  assert.match(await p.textContent('.pb-due'), /15:30/);
+  await p.evaluate(() => window.B.configure({ locale: 'en-GB', hour12: undefined, timeZone: 'Asia/Tokyo' }));
+  const tokyo = await p.evaluate((d) => new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Tokyo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(d)), due);
+  assert.ok((await p.textContent('.pb-due')).includes(tokyo), `the hour in Tokyo (${tokyo})`);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -138,7 +148,7 @@ test('dragging saves the position, also for automatic notes', async (t) => {
   await ctx.close();
 });
 
-test('create through the dialog, escape what was typed, then finish it', async (t) => {
+test('create through the dialog, escape what was typed, then archive it', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page();
   await p.click('[data-pb=add]');
@@ -153,9 +163,11 @@ test('create through the dialog, escape what was typed, then finish it', async (
   assert.equal(await p.evaluate(() => window.pwned), undefined);
   assert.equal(await p.locator('.pb-note').count(), 9);
   assert.equal(await p.evaluate(() => document.activeElement.dataset.pb), 'add', 'the focus goes back to "+ Note"');
+  assert.equal(await note.locator('[data-pb=done]').getAttribute('title'), 'Archive');
   await note.locator('[data-pb=done]').click();
-  await p.waitForTimeout(300);
-  assert.equal(await p.locator('.pb-note').count(), 8);
+  // it flies into the Archived button, then leaves the board
+  await p.waitForFunction(() => document.querySelectorAll('.pb-note').length === 8);
+  assert.equal(await p.textContent('[data-pb=archived] .pb-badge'), '4');
   await p.reload();
   await p.waitForSelector('.pb-note');
   assert.equal(await p.locator('.pb-note').count(), 8);
@@ -181,7 +193,7 @@ test('right-click on the glass: pick a type, the note starts exactly where you c
   assert.equal(await items.count(), 7, 'one item per type');
   assert.match(await items.nth(0).textContent(), /Broken[\s\S]*Something failed/, 'with its meaning');
   await p.click('.pb-menu [data-pb=menu-new][data-color=green]');
-  assert.ok(await p.locator('.pb-menu').isHidden());
+  assert.ok(await p.locator(MENU).isHidden());
   assert.ok(await p.locator('.pb-dialog [name=color][value=green]').isChecked());
   await p.fill('.pb-dialog [name=text]', 'Right here');
   await p.click('.pb-dialog [type=submit]');
@@ -195,23 +207,32 @@ test('right-click on the glass: pick a type, the note starts exactly where you c
   // Escape and a click outside close the menu without creating anything
   await p.mouse.click(at.x, at.y + 20, { button: 'right' });
   await p.keyboard.press('Escape');
-  assert.ok(await p.locator('.pb-menu').isHidden());
+  assert.ok(await p.locator(MENU).isHidden());
   assert.deepEqual(errors, []);
   await ctx.close();
 });
 
-test('right-click on a note changes its type; app notes keep the browser menu', async (t) => {
+test('right-click on a note: Color ▸, Edit, then Archive last; Color opens on hover; an app note has Open and Dismiss only', async (t) => {
   if (!browser) return t.skip('no browser');
   const { p, ctx } = await page();
   const note = p.locator('.pb-note:not(.pb-note--auto)').first();
   const ref = await note.getAttribute('data-ref');
   await note.click({ button: 'right', position: { x: 60, y: 80 } });
-  assert.equal(await p.locator('.pb-menu [data-pb=menu-color]').count(), 7);
-  assert.equal(await p.locator('.pb-menu [data-pb=menu-edit]').count(), 1);
-  await p.click('.pb-menu [data-pb=menu-color][data-color=teal]');
+  const items = await p.$$eval(`${MENU} .pb-menu-item, ${MENU} hr`, (els) => els.map((el) => (el.tagName === 'HR' ? '---' : el.dataset.sub || el.dataset.pb)));
+  assert.deepEqual(items, ['color', 'menu-edit', '---', 'menu-archive'], 'no State or Category while lanes are off; Archive is last');
+  assert.match(await p.textContent(`${MENU} [data-sub=color]`), /Color[\s\S]*Notes/, 'the current value on the right');
+  await p.hover(`${MENU} [data-sub=color]`);
+  await p.waitForSelector(`${SUB} [data-pb=menu-color]`);
+  assert.equal(await p.locator(`${SUB} [data-pb=menu-color]`).count(), 7);
+  assert.equal(await p.getAttribute(`${SUB} [aria-checked=true]`, 'data-color'), 'yellow');
+  await p.click(`${SUB} [data-pb=menu-color][data-color=teal]`);
   assert.equal(await p.getAttribute(`[data-ref="${ref}"]`, 'data-color'), 'teal');
+  assert.ok(await p.locator(SUB).isHidden() && await p.locator(MENU).isHidden());
   await p.locator('.pb-note--auto').first().click({ button: 'right', position: { x: 60, y: 80 } });
-  assert.ok(await p.locator('.pb-menu').isHidden());
+  const appItems = await p.$$eval(`${MENU} .pb-menu-item, ${MENU} hr`, (els) => els.map((el) => (el.tagName === 'HR' ? '---' : el.dataset.pb)));
+  assert.deepEqual(appItems, ['menu-open', '---', 'menu-dismiss'], 'no Color, State, Edit or Archive on an app note');
+  await p.keyboard.press('Escape');
+  assert.ok(await p.locator(MENU).isHidden());
   await p.reload();
   await p.waitForSelector('.pb-note');
   assert.equal(await p.getAttribute(`[data-ref="${ref}"]`, 'data-color'), 'teal');
@@ -263,7 +284,7 @@ test('the gear edits the types: rename, recolor, add, remove; app types only ren
   await p.waitForSelector('.pb-note');
   assert.deepEqual(await keys(), ['Broken', 'Attention', 'Mine', 'Routine', 'Numbers', 'Calls', 'Someday']);
   await p.mouse.click(300, 700, { button: 'right' });
-  assert.match(await p.locator('.pb-menu').textContent(), /Calls[\s\S]*People to call back/);
+  assert.match(await p.locator(MENU).textContent(), /Calls[\s\S]*People to call back/);
   assert.deepEqual(errors, []);
   await ctx.close();
 });
@@ -330,6 +351,7 @@ test('the bottom corners resize the board, centered and saved; double-click rese
   const b4 = await box();
   assert.ok(Math.abs(b4.w - b4.avail * 0.8) <= 2, `reset: ${JSON.stringify(b4)}`);
   await p.click('.pb-gear');
+  await p.click('.pb-tab[data-tab=view]');
   await p.check('[name=lockSize]');
   await p.click('.pb-settings [type=submit]');
   assert.equal(await p.locator('.pb-resize--right').isVisible(), false);
@@ -366,6 +388,7 @@ test('cut text: a click opens it whole in the center; the gear switches to "more
   assert.equal(await p.locator('.pb-dialog[open]').count(), 0);
   // "more": only cut notes get the link, it opens in place and is saved in the store
   await p.click('.pb-gear');
+  await p.click('.pb-tab[data-tab=view]');
   await p.check('[name=expand][value=more]');
   await p.click('.pb-settings [type=submit]');
   assert.equal(await p.locator('.pb-more').count(), 2);
@@ -377,6 +400,7 @@ test('cut text: a click opens it whole in the center; the gear switches to "more
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('t-expand')).view.expand), 'more');
   // in place: hovering a cut note shows it whole
   await p.click('.pb-gear');
+  await p.click('.pb-tab[data-tab=view]');
   await p.check('[name=expand][value=inplace]');
   await p.click('.pb-settings [type=submit]');
   await note('App note').hover();
@@ -468,11 +492,12 @@ test('center: ×, a click outside and Done play it back too; a note off screen o
   await openFirst();
   await p.click('.pb-reader-close');
   assert.deepEqual(await closing(), { open: true, closing: true, fade: false });
-  // Done: back into the note, which then leaves the board
+  // Archive: back into the note, which then flies into the Archived button
   await openFirst();
+  assert.equal(await p.textContent('[data-pb=reader-done]'), 'Archive');
   await p.click('[data-pb=reader-done]');
   assert.deepEqual(await closing(), { open: true, closing: true, fade: false });
-  assert.ok(await p.evaluate(() => document.querySelector('[data-ref="id:1"]').classList.contains('pb-note--leaving')), 'then it fades out');
+  assert.ok(await p.evaluate(() => document.querySelector('[data-ref="id:1"]').classList.contains('pb-note--gone') && document.querySelector('.pb-ghost') !== null), 'then it flies to Archived');
   await settle(p);
   await p.waitForFunction(() => !document.querySelector('[data-ref="id:1"]'));
   assert.equal(await p.evaluate(() => JSON.parse(localStorage.getItem('t-reader')).notes.find((n) => n.id === 1).doneAt !== null), true);
@@ -654,16 +679,22 @@ test('keyboard: arrows move notes and every move is saved; Enter, Esc and the me
   await p.keyboard.press('Escape');
   await dialogClosed(p);
   assert.equal(await p.evaluate(() => document.activeElement.dataset.ref), 'id:2');
-  // the menu of a note: its type is the checked item; Esc gives the focus back to the note
+  // the menu of a note: → opens a submenu on its current value, ← comes back; End is Archive; Esc gives the focus back
   await p.focus('[data-ref="id:1"]');
   const a = await p.locator('[data-ref="id:1"]').boundingBox();
   await p.locator('[data-ref="id:1"]').dispatchEvent('contextmenu', { clientX: a.x + 20, clientY: a.y + 20, button: 2 });
-  const item = await p.evaluate(() => ({ role: document.activeElement.getAttribute('role'), checked: document.activeElement.getAttribute('aria-checked'), color: document.activeElement.dataset.color, label: document.querySelector('.pb-menu').getAttribute('aria-label') }));
-  assert.deepEqual(item, { role: 'menuitemradio', checked: 'true', color: 'yellow', label: 'Change type' });
+  const focused = () => p.evaluate(() => { const el = document.activeElement; return { role: el.getAttribute('role'), pb: el.dataset.pb, sub: el.dataset.sub, checked: el.getAttribute('aria-checked'), color: el.dataset.color, expanded: el.getAttribute('aria-expanded') }; });
+  assert.deepEqual(await focused(), { role: 'menuitem', pb: 'menu-sub', sub: 'color', checked: null, color: undefined, expanded: 'false' });
+  assert.equal(await p.getAttribute(MENU, 'aria-label'), 'A', 'the menu is named after its note');
+  await p.keyboard.press('ArrowRight');
+  assert.deepEqual(await focused(), { role: 'menuitemradio', pb: 'menu-color', sub: undefined, checked: 'true', color: 'yellow', expanded: null });
+  await p.keyboard.press('ArrowLeft');
+  assert.deepEqual(await focused(), { role: 'menuitem', pb: 'menu-sub', sub: 'color', checked: null, color: undefined, expanded: 'false' });
+  assert.ok(await p.locator(SUB).isHidden());
   await p.keyboard.press('End');
-  assert.equal(await p.evaluate(() => document.activeElement.dataset.pb), 'menu-done');
+  assert.equal(await p.evaluate(() => document.activeElement.dataset.pb), 'menu-archive');
   await p.keyboard.press('Escape');
-  assert.ok(await p.locator('.pb-menu').isHidden());
+  assert.ok(await p.locator(MENU).isHidden());
   assert.equal(await p.evaluate(() => document.activeElement.dataset.ref), 'id:1');
   assert.deepEqual(errors, []);
   await ctx.close();
@@ -725,7 +756,11 @@ test('works under a strict Content-Security-Policy: no inline styles, no inline 
   await p.keyboard.press('Escape');
   await dialogClosed(p);
   await p.click('[data-ref="id:2"]', { button: 'right', position: { x: 40, y: 60 } });
-  assert.equal(await p.locator('.pb-menu .pb-swatch >> nth=1').evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(255, 136, 153)', 'and the menu');
+  assert.equal(await p.locator(`${MENU} .pb-swatch >> nth=0`).evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(255, 136, 153)', 'and the menu');
+  await p.hover(`${MENU} [data-sub=color]`);
+  assert.equal(await p.locator(`${SUB} [data-color=pink] .pb-swatch`).evaluate((el) => getComputedStyle(el).backgroundColor), 'rgb(255, 136, 153)', 'and its submenu');
+  await p.keyboard.press('Escape');
+  await p.keyboard.press('Escape');
   assert.deepEqual(await p.evaluate(() => window.violations), []);
   assert.deepEqual(errors, []);
   await ctx.close();

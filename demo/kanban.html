@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>postit-board demo: Kanban</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../src/postit-board.css">
+  <link rel="stylesheet" href="./demo.css">
+</head>
+<body>
+  <main>
+    <header>
+      <h1>postit-board</h1>
+      <p>Lanes by state: drag a note to another lane to move it on, or use State in its right-click menu. The gear changes the lanes. Saved in this browser.</p>
+      <button type="button" id="reset">Reset demo</button>
+      <nav aria-label="Demos"><a href="./index.html">Board</a><a href="./kanban.html" aria-current="page">Kanban</a><a href="./categories.html">Categories</a><a href="./archived.html">Archived</a></nav>
+      <div class="tools" role="group" aria-label="Try the phone">
+        <button type="button" id="phone" aria-pressed="false">Phone width</button>
+        <label>On a phone, order by
+          <select id="order"><option value="position">position</option><option value="priority">priority: overdue, today, type</option></select></label>
+        <label>show
+          <select id="limit"><option value="">every note</option><option value="2">the first 2, then "Show more"</option><option value="4">the first 4, then "Show more"</option></select></label>
+      </div>
+    </header>
+    <section id="board" aria-label="Board"></section>
+  </main>
+
+  <script type="module">
+    import { startDemo } from './demo.js';
+    startDemo('kanban');
+  </script>
+</body>
+</html>

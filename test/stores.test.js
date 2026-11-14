@@ -38,8 +38,56 @@ test('localStore keeps app note positions by key, and the legend, size and view'
     positions: { 'auto:disk': { x: 0.5, y: 100, z: 7 } },
     legend: [{ color: 'green', label: 'Print' }],
     size: { width: 0.5, height: 320, locked: true },
-    view: { expand: 'more' },
+    view: { expand: 'more', archiveBox: null },
   });
+});
+
+test('localStore lists archived notes, the last first; Restore and Delete for good', () => {
+  const store = localStore('t', memory());
+  for (const title of ['a', 'b', 'c']) store.create({ title, lane: { states: 'doing' } });
+  assert.deepEqual(store.archived(), { notes: [] });
+  store.update({ id: 1 }, { done: true });
+  store.update({ id: 3 }, { done: true });
+  const listed = store.archived().notes;
+  assert.deepEqual(listed.map((n) => n.id), [3, 1], 'the last archived first');
+  assert.ok(listed.every((n) => n.doneAt), 'with when');
+  assert.deepEqual(listed[0].lane, { states: 'doing' }, 'and the lane it was in');
+  assert.deepEqual(store.load().notes.map((n) => n.id), [2]);
+  // Restore: back on the board, with its lane
+  const back = store.update({ id: 3 }, { done: false });
+  assert.equal(back.doneAt, null);
+  assert.deepEqual(store.load().notes.map((n) => n.id), [2, 3]);
+  // Delete for good
+  store.update({ id: 1 }, { removed: true });
+  assert.deepEqual(store.archived(), { notes: [] });
+});
+
+test('localStore keeps the lanes, and where an app note sits in each mode', () => {
+  const store = localStore('t', memory());
+  const saved = store.saveLanes({ mode: 'categories', categories: [{ id: 'work', name: 'Work' }, { id: 'work', name: 'dup' }] });
+  assert.deepEqual(saved, { lanes: { mode: 'categories', categories: [{ id: 'work', name: 'Work' }] } });
+  store.update({ key: 'auto:disk' }, { lanePos: { categories: { x: 0.5, y: 70 } }, z: 2 });
+  store.update({ key: 'auto:disk' }, { x: 0.1, y: 10 });
+  const n = store.create({ text: 'x', lane: 'work', lanePos: { categories: { x: 2, y: 60 } } });
+  assert.deepEqual([n.lane, n.lanePos], [{ states: 'work', categories: 'work' }, { categories: { x: 1, y: 60 } }]);
+  const loaded = store.load();
+  assert.deepEqual(loaded.lanes, { mode: 'categories', categories: [{ id: 'work', name: 'Work' }] });
+  assert.deepEqual(loaded.positions['auto:disk'], { z: 2, lanePos: { categories: { x: 0.5, y: 70 } }, x: 0.1, y: 10 });
+  store.update({ key: 'auto:disk' }, { lanePos: null });
+  assert.equal(store.load().positions['auto:disk'].lanePos, undefined);
+});
+
+test('localStore keeps a dismissed app note by key, with when and its place; null brings it back', () => {
+  const store = localStore('t', memory());
+  store.update({ key: 'auto:disk' }, { x: 0.2, y: 40 });
+  const saved = store.update({ key: 'auto:disk' }, { dismissed: 's1:abc' });
+  assert.match(saved.dismissedAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+  assert.deepEqual(saved, { key: 'auto:disk', x: 0.2, y: 40, dismissed: 's1:abc', dismissedAt: saved.dismissedAt });
+  assert.deepEqual(store.load().positions['auto:disk'], { x: 0.2, y: 40, dismissed: 's1:abc', dismissedAt: saved.dismissedAt });
+  store.update({ key: 'auto:disk' }, { z: 4 });
+  assert.deepEqual([store.load().positions['auto:disk'].dismissed, store.load().positions['auto:disk'].dismissedAt], ['s1:abc', saved.dismissedAt], 'a move keeps it');
+  store.update({ key: 'auto:disk' }, { dismissed: null });
+  assert.deepEqual(store.load().positions['auto:disk'], { x: 0.2, y: 40, z: 4 }, 'dismissed and dismissedAt go together');
 });
 
 test('localStore starts empty when what it finds is not JSON', () => {

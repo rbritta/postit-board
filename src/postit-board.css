@@ -7,21 +7,29 @@
   --pb-fg: #e6edf3;
   --pb-accent: #68aff1;
   --pb-accent-ink: #0d1117;
+  --pb-accent-soft: rgba(104, 175, 241, 0.16); /* the Archived toggle while it is on, a lane under a dragged note */
   --pb-danger: #f87171;
-  --pb-surface: #161b22; /* the dialogs and the right-click menu */
+  --pb-done: #86efac; /* the Archive box when a note is over it, the check in the toast */
+  --pb-surface: #161b22; /* the dialogs, the right-click menu, the toast and the balloon */
   --pb-surface-fg: #e6edf3;
   --pb-link: #1d3a78; /* links on the notes and in the reader */
   --pb-link-hover: #6e7681;
+  --pb-line: rgba(255, 255, 255, 0.06); /* lines between lanes and between archived rows */
+  --pb-lane-head: rgba(22, 28, 36, 0.94); /* the lane headers, over the notes that slide under them */
+  --pb-target: rgba(13, 17, 23, 0.55); /* the Archive box */
+  --pb-halo: 17, 22, 29; /* the blur around the Archive box, as R, G, B */
+  --pb-sticky-top: 0px; /* where the lane headers stick when the page scrolls: the height of a fixed app header */
   --pb-radius: 14px;
   --pb-note-width: min(220px, 23%);
   --pb-note-min-height: 140px;
   --pb-title-lines: 2;
+  --pb-title-only-lines: 4;
   --pb-text-lines: 4;
-  --pb-motion-in: 240ms; /* a note opening, the reader growing out of its note */
+  --pb-motion-in: 240ms; /* a note opening, the reader growing out of its note, the Archive box coming */
   --pb-motion-out: 180ms; /* and going back, a little faster */
   --pb-font: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --pb-ui-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  container-type: inline-size;
+  container: pb / inline-size;
   color: var(--pb-fg);
   font-family: var(--pb-ui-font);
 }
@@ -32,9 +40,16 @@
   --pb-muted: #6b7280;
   --pb-accent: #1d4ed8;
   --pb-accent-ink: #fff;
+  --pb-accent-soft: rgba(29, 78, 216, 0.1);
+  --pb-done: #15803d;
   --pb-surface: #fff;
   --pb-surface-fg: #1f2937;
+  --pb-line: rgba(15, 23, 42, 0.08);
+  --pb-lane-head: rgba(248, 250, 252, 0.94);
+  --pb-target: rgba(255, 255, 255, 0.7);
+  --pb-halo: 226, 232, 240;
 }
+.pb-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 .pb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
 .pb-hint { flex: 1; color: var(--pb-muted); font-size: 13px; text-align: right; }
@@ -43,10 +58,24 @@
 .pb-btn {
   font: 600 14px var(--pb-ui-font); color: inherit; cursor: pointer;
   background: rgba(127, 127, 127, 0.14); border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 7px 14px;
+  transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease;
 }
 .pb-btn:hover { background: rgba(127, 127, 127, 0.24); }
-.pb-btn--primary { background: var(--pb-accent); border-color: transparent; color: var(--pb-accent-ink); font-weight: 600; }
+.pb-btn--primary, .pb-btn--primary:hover { background: var(--pb-accent); border-color: transparent; color: var(--pb-accent-ink); font-weight: 600; }
+.pb-btn--primary:hover { filter: brightness(1.1); }
 .pb-btn--danger { color: var(--pb-danger); }
+.pb-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+
+/* Archived: a toggle next to "+ Note", pressed while the glass shows the archived notes */
+.pb-btn--toggle { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px 6px 12px; }
+.pb-btn--toggle svg { width: 16px; height: 16px; flex: none; }
+.pb-btn--toggle[aria-pressed="true"] { background: var(--pb-accent-soft); border-color: var(--pb-accent); box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.35); }
+.pb-badge { min-width: 20px; padding: 0 6px; border-radius: 999px; background: rgba(127, 127, 127, 0.24); font: 600 12px/20px var(--pb-ui-font); text-align: center; font-variant-numeric: tabular-nums; box-sizing: border-box; }
+.pb-badge[hidden] { display: none; }
+.pb-btn--toggle[aria-pressed="true"] .pb-badge { background: var(--pb-accent); color: var(--pb-accent-ink); }
+/* the count pulses when a note lands in Archived */
+.pb-badge--bump { animation: pb-bump calc(var(--pb-motion-in) * 2.2) cubic-bezier(0.2, 0, 0, 1); }
+@keyframes pb-bump { 30% { transform: scale(1.45); background: var(--pb-done); color: #052e16; } }
 
 /* the board takes --pb-frame of the width (80% by default, people resize it), always centered */
 .pb-bar, .pb-stage, .pb-legend { width: var(--pb-frame, 80%); max-width: 100%; min-width: min(100%, 480px); margin-inline: auto; box-sizing: border-box; }
@@ -75,6 +104,8 @@
 /* open shows the whole text; closing keeps it whole while it shrinks back, the "…" returns at the end */
 .pb-note:is(.pb-note--open, .pb-note--closing) :is(.pb-title, .pb-text) { -webkit-line-clamp: unset; line-clamp: none; display: block; }
 .pb-note--open, .pb-note--closing { z-index: 2147483000 !important; }
+/* with lanes an open note stays under the lane headers, like every note */
+.pb-glass--lanes :is(.pb-note--open, .pb-note--closing) { z-index: 2147481997 !important; }
 .pb-note--open { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55); }
 /* the note being read in the center: it is the reader that flew there */
 .pb-note--reading { visibility: hidden; }
@@ -97,8 +128,27 @@
 }
 .pb-note:focus-visible { outline: 2px solid var(--pb-accent); }
 .pb-note--dragging { cursor: grabbing; transform: rotate(0deg) scale(1.05); box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45); transition: none; }
+/* the note being dragged passes over the halo and slides under the Archive box */
+.pb-note--dragging, .pb-note--sinking { z-index: 2147481995 !important; }
+.pb-note--over { opacity: 0.88; }
 .pb-note--leaving { opacity: 0; transform: scale(0.9); }
+.pb-note--gone { visibility: hidden; }
 .pb-note--hidden { display: none; }
+/* a note back on the board (Undo, Restore, another lane) */
+.pb-note--enter { animation: pb-note-in var(--pb-motion-in) cubic-bezier(0.2, 0, 0, 1) both; }
+@keyframes pb-note-in { from { opacity: 0; transform: rotate(var(--pb-r, 0deg)) scale(0.85); } }
+/* a finger holding a note on a phone, before its menu opens */
+.pb-note--pressed { transform: scale(0.96); transition: transform 0.2s ease; }
+/* a note flying out of the glass (into the Archive box or the Archived button), fixed to the window */
+.pb-note.pb-ghost {
+  position: fixed; left: var(--pb-gx); top: var(--pb-gy); width: var(--pb-gw); height: var(--pb-gh); min-height: 0; margin: 0;
+  z-index: 2147481995; pointer-events: none; transition: none; overflow: hidden;
+}
+/* the note being dragged, lifted out of the glass: it follows the pointer anywhere, under the Archive box */
+.pb-note.pb-note--lifted { pointer-events: auto; cursor: grabbing; transform: rotate(0deg) scale(1.05); }
+.pb-note--lifted * { pointer-events: none; }
+/* gliding back into the glass after the drop (or into the box) */
+.pb-note.pb-note--landing { pointer-events: none; }
 .pb-note--auto::after {
   content: ""; position: absolute; right: 0; bottom: 0;
   border-style: solid; border-width: 22px 22px 0 0;
@@ -111,6 +161,9 @@
 }
 .pb-title { margin: 0; font-size: 16.5px; font-weight: 700; line-height: 1.25; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pb-title-lines); line-clamp: var(--pb-title-lines); overflow: hidden; }
+/* a title alone: in the middle of the room above the footer, and up to --pb-title-only-lines (4) lines */
+.pb-note--title-only .pb-title { margin-block: auto; -webkit-line-clamp: var(--pb-title-only-lines); line-clamp: var(--pb-title-only-lines); }
+.pb-note--title-only .pb-foot { margin-top: 0; }
 /* long text ends in "…" (the full text is in the tooltip and in Edit); set --pb-text-lines: none to show everything */
 .pb-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere;
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pb-text-lines); line-clamp: var(--pb-text-lines); overflow: hidden; }
@@ -122,10 +175,11 @@
 .pb-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; row-gap: 5px; margin-top: auto; font: 13px var(--pb-ui-font); }
 /* app notes keep room for the folded corner */
 .pb-note--auto .pb-foot { padding-right: 18px; }
-/* edit and done stay together: when the due time leaves no room, both go to the next line */
+/* edit and archive stay together: when the due time leaves no room, both go to the next line */
 .pb-tools { display: inline-flex; gap: 6px; margin-left: auto; }
 .pb-icon { background: rgba(0, 0, 0, 0.09); border: 0; border-radius: 6px; padding: 2px 9px; color: var(--pb-ink); cursor: pointer; font-size: 14px; }
 .pb-icon:hover { background: rgba(0, 0, 0, 0.18); }
+.pb-icon:disabled { opacity: 0.35; cursor: not-allowed; }
 .pb-due { border-radius: 999px; padding: 1px 8px; background: rgba(0, 0, 0, 0.08); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
 .pb-due::before { content: "⏰ "; }
 .pb-due--today { background: rgba(217, 119, 6, 0.22); }
@@ -139,9 +193,176 @@
 .pb-swatch { width: 14px; height: 14px; border-radius: 3px; background: var(--pb-note); box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35); flex: none; }
 .pb-count { color: var(--pb-muted); font-variant-numeric: tabular-nums; }
 
+/* ---------- the Archive box: outside the glass while a note is dragged ---------- */
+.pb-target {
+  position: fixed; z-index: 2147482000; left: var(--pb-tx); top: var(--pb-ty); width: var(--pb-tw); height: var(--pb-th);
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; box-sizing: border-box; padding: 6px;
+  border: 2px dashed rgba(127, 127, 127, 0.55); border-radius: 12px; background: var(--pb-target); backdrop-filter: blur(6px);
+  color: var(--pb-fg); pointer-events: none; opacity: var(--pb-near, 0.35); transform: scale(calc(0.94 + var(--pb-k, 0) * 0.06));
+  transition: opacity 110ms ease, transform 110ms ease, border-color 110ms ease, background-color 110ms ease, color 110ms ease;
+  animation: pb-target-in var(--pb-motion-in) cubic-bezier(0.2, 0, 0, 1) both;
+  --pb-from: 0px;
+}
+.pb-target--left { --pb-from: -16px; }
+.pb-target--right { --pb-from: 16px; }
+.pb-target svg { width: min(64px, calc(var(--pb-tw) * 0.45)); height: min(64px, calc(var(--pb-tw) * 0.45)); flex: none; }
+.pb-target-label { font: 600 13px var(--pb-ui-font); letter-spacing: 0.03em; text-align: center; }
+/* a pill in the bar or at the window's edge, when there is no room beside the glass */
+.pb-target--bar, .pb-target--dock { flex-direction: row; gap: 8px; border-radius: 999px; padding: 0 14px; }
+.pb-target--bar svg, .pb-target--dock svg { width: 22px; height: 22px; }
+/* on a phone: over the note, in the glass */
+.pb-target--over { position: absolute; }
+.pb-target--armed { border-style: solid; border-color: var(--pb-done); background: rgba(22, 101, 52, 0.45); color: #dcfce7; box-shadow: 0 0 0 6px rgba(134, 239, 172, 0.12); }
+.pb[data-theme="light"] .pb-target--armed { background: rgba(220, 252, 231, 0.92); color: #14532d; }
+.pb-target--gulp svg { animation: pb-gulp calc(var(--pb-motion-in) * 1.6) cubic-bezier(0.2, 0, 0, 1); }
+@keyframes pb-target-in { from { opacity: 0; transform: translateX(var(--pb-from)) scale(0.94); } }
+@keyframes pb-gulp { 45% { transform: scale(1.25); } }
+/*
+ * Around the box: a big round patch that blurs and dims what is behind it, fading out at its rim. It may spill
+ * over the glass, and never takes a pointer: a drop or a click goes through it.
+ */
+.pb-halo {
+  position: fixed; z-index: 2147481990; left: var(--pb-hx); top: var(--pb-hy); width: var(--pb-hd); height: var(--pb-hd);
+  border-radius: 50%; pointer-events: none;
+  background: radial-gradient(closest-side, rgba(var(--pb-halo), calc(0.66 + var(--pb-k, 0) * 0.22)) 0%, rgba(var(--pb-halo), calc(0.5 + var(--pb-k, 0) * 0.26)) 58%, rgba(var(--pb-halo), 0) 100%);
+  backdrop-filter: blur(calc(5px + var(--pb-k, 0) * 6px)) saturate(0.45);
+  -webkit-mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  mask-image: radial-gradient(closest-side, #000 52%, rgba(0, 0, 0, 0.55) 78%, transparent 100%);
+  opacity: calc(0.7 + var(--pb-k, 0) * 0.3);
+  transition: opacity 110ms ease;
+  animation: pb-fade-in var(--pb-motion-in) ease both;
+}
+.pb-halo--in { position: absolute; }
+/* what the drop does, next to the box; it shows as the pointer comes near */
+.pb-balloon {
+  position: fixed; z-index: 2147482001; left: var(--pb-bx); top: var(--pb-by); width: var(--pb-bw, 214px); box-sizing: border-box; padding: 9px 12px;
+  border-radius: 10px; background: var(--pb-surface); color: var(--pb-surface-fg); border: 1px solid var(--pb-glass-border);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45); font: 12.5px/1.4 var(--pb-ui-font); pointer-events: none;
+  opacity: var(--pb-near-b, 0); transition: opacity 110ms ease;
+}
+.pb-balloon b { display: block; font-size: 13px; margin-bottom: 2px; }
+.pb-balloon::after { content: ''; position: absolute; left: calc(var(--pb-ax, 50%) - 6px); width: 10px; height: 10px; background: var(--pb-surface); border: 1px solid var(--pb-glass-border); transform: rotate(45deg); }
+/* above the box it hangs from its bottom edge: nothing is measured while a note is dragged */
+.pb-balloon[data-arrow="down"] { translate: 0 -100%; }
+.pb-balloon[data-arrow="down"]::after { bottom: -6px; border-left: 0; border-top: 0; }
+.pb-balloon[data-arrow="up"]::after { top: -6px; border-right: 0; border-bottom: 0; }
+
+/* ---------- the toast: "Archived · Undo" for a few seconds ---------- */
+.pb-toast {
+  position: fixed; left: 50%; bottom: 24px; z-index: 2147483100; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 10px; width: max-content; max-width: min(520px, calc(100vw - 24px)); box-sizing: border-box; padding: 8px 8px 8px 14px;
+  border-radius: 10px; background: var(--pb-surface); color: var(--pb-surface-fg); border: 1px solid var(--pb-glass-border);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.5); font: 13.5px var(--pb-ui-font); overflow: hidden;
+  animation: pb-toast-in var(--pb-motion-in) cubic-bezier(0.2, 0, 0, 1) both;
+}
+.pb-toast svg { width: 22px; height: 22px; flex: none; color: var(--pb-done); }
+.pb-toast-msg { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-toast-act { flex: none; background: none; border: 0; padding: 5px 9px; border-radius: 6px; font: 700 13.5px var(--pb-ui-font); color: var(--pb-accent); cursor: pointer; }
+.pb-toast-act:hover { color: var(--pb-link-hover); }
+.pb-toast-bar { position: absolute; left: 0; bottom: 0; height: 2px; width: 100%; background: var(--pb-accent); opacity: 0.55; transform-origin: left; animation: pb-toast-time 6s linear both; }
+.pb-toast--out { opacity: 0; transition: opacity var(--pb-motion-out) ease; }
+@keyframes pb-toast-in { from { opacity: 0; translate: 0 10px; } }
+@keyframes pb-toast-time { to { transform: scaleX(0); } }
+
+/* ---------- lanes on a desktop: columns over the glass, a header row with each name and count ---------- */
+/* not a scroll box: the header row sticks to the page; a board with a fixed height scrolls itself */
+.pb-glass--lanes:not(.pb-glass--fixed) { overflow: clip; }
+.pb-lanes { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(var(--pb-lanes, 3), minmax(0, 1fr)); pointer-events: none; }
+.pb-lane { position: relative; border-left: 1px solid var(--pb-line); transition: background-color 120ms ease; }
+.pb-lane:first-child { border-left: 0; }
+/* the header row: its own layer above every note (the dragged one slides under it), sticky when the page scrolls */
+.pb-lane-heads {
+  position: sticky; top: var(--pb-sticky-top); z-index: 2147481998; display: grid; grid-template-columns: repeat(var(--pb-lanes, 3), minmax(0, 1fr));
+  background: var(--pb-lane-head); backdrop-filter: blur(8px); border-bottom: 1px solid var(--pb-line); box-shadow: 0 8px 14px -10px rgba(0, 0, 0, 0.7);
+  border-radius: var(--pb-radius) var(--pb-radius) 0 0;
+}
+.pb-lane-h { display: flex; align-items: center; gap: 8px; min-width: 0; height: 40px; box-sizing: border-box; padding: 0 14px; font: 600 13px var(--pb-ui-font); color: var(--pb-muted); border-left: 1px solid var(--pb-line); transition: color 120ms ease, background-color 120ms ease; }
+.pb-lane-h:first-child { border-left: 0; }
+.pb-lane-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-lane-h .pb-count { font-weight: 400; }
+.pb-lane-h .pb-step { font-weight: 400; opacity: 0.6; }
+.pb-lane--over { background: color-mix(in srgb, var(--pb-accent) 7%, transparent); }
+.pb-lane-h.pb-lane--over { color: var(--pb-fg); background: color-mix(in srgb, var(--pb-accent) 12%, transparent); }
+.pb-lane-empty { position: absolute; top: 120px; left: 0; right: 0; margin: 0; padding: 0 12px; text-align: center; color: var(--pb-muted); opacity: 0.7; font: 13px var(--pb-ui-font); }
+.pb-lane-h.pb-lane--flash { animation: pb-flash calc(var(--pb-motion-in) * 3.75) ease; }
+@keyframes pb-flash { 20% { color: var(--pb-fg); background: var(--pb-accent-soft); } }
+
+/* ---------- lanes on a phone: stacked sections with sticky titles that fold ---------- */
+.pb-sec + .pb-sec { margin-top: 6px; }
+.pb-sec-h {
+  position: sticky; top: calc(var(--pb-sticky-top) - 1px); z-index: 2147481998; display: flex; align-items: center; gap: 8px; width: 100%; box-sizing: border-box; padding: 11px 8px;
+  background: var(--pb-lane-head); backdrop-filter: blur(6px); border: 0; border-bottom: 1px solid var(--pb-line);
+  color: var(--pb-fg); font: 600 14px var(--pb-ui-font); cursor: pointer; text-align: left; border-radius: 8px 8px 0 0;
+}
+.pb-sec-h .pb-count { font-weight: 400; }
+.pb-sec-h .pb-chev { margin-left: auto; color: var(--pb-muted); transition: transform 160ms ease; }
+.pb-sec[data-collapsed] .pb-chev { transform: rotate(-90deg); }
+.pb-sec-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 22px 12px; padding: 22px 2px 10px; }
+.pb-sec[data-collapsed] .pb-sec-grid { display: none; }
+.pb-sec-empty { grid-column: 1 / -1; margin: -8px 0 0; color: var(--pb-muted); font-size: 13px; }
+/* narrow screens: "Show N more" after the first notes, "Show less" once open */
+.pb-fold {
+  grid-column: 1 / -1; display: block; width: 100%; box-sizing: border-box; padding: 10px 12px;
+  border: 1px dashed var(--pb-glass-border); border-radius: 10px; background: rgba(127, 127, 127, 0.06);
+  color: var(--pb-fg); font: 600 14px var(--pb-ui-font); cursor: pointer; transition: background-color 120ms ease;
+}
+.pb-fold:hover { background: rgba(127, 127, 127, 0.14); }
+.pb-fold[aria-expanded="true"] { color: var(--pb-muted); font-weight: 500; }
+.pb-fold:focus-visible { outline: 2px solid var(--pb-accent); outline-offset: 2px; }
+.pb-folding { overflow: hidden; }
+
+/* ---------- Archived: a table of the archived notes in place of the notes ---------- */
+.pb-glass--archive { padding: 16px 18px 12px; }
+.pb-arch-top { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
+.pb-arch-top[hidden], .pb-table[hidden], .pb-arch-none[hidden] { display: none; }
+.pb-search { position: relative; flex: 0 1 320px; min-width: 0; }
+.pb-search input { width: 100%; box-sizing: border-box; font: 14px var(--pb-ui-font); color: inherit; background: rgba(127, 127, 127, 0.1); border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 7px 10px 7px 32px; }
+.pb-search input:focus { outline: none; border-color: var(--pb-accent); }
+.pb-search svg { position: absolute; left: 10px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); color: var(--pb-muted); pointer-events: none; }
+.pb-arch-count { color: var(--pb-muted); font-size: 13px; }
+.pb-table { width: 100%; border-collapse: collapse; font: 14px var(--pb-ui-font); }
+.pb-table th { text-align: left; font-weight: 600; font-size: 12px; color: var(--pb-muted); padding: 8px 10px; border-bottom: 1px solid var(--pb-glass-border); white-space: nowrap; }
+.pb-table td { padding: 10px; border-bottom: 1px solid var(--pb-line); vertical-align: middle; transition: opacity var(--pb-motion-out) ease; }
+.pb-table tbody tr:hover td { background: rgba(127, 127, 127, 0.05); }
+.pb-table tbody tr:last-child td { border-bottom: 0; }
+.pb-c-note { max-width: 0; width: 46%; }
+.pb-arch-title { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-arch-text { color: var(--pb-muted); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-type-chip { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+.pb-lane-chip { display: inline-block; padding: 1px 9px; border-radius: 999px; background: rgba(127, 127, 127, 0.16); font-size: 12.5px; white-space: nowrap; }
+.pb-lane-chip--gone { color: var(--pb-muted); font-style: italic; }
+.pb-reader .pb-lane-chip { background: rgba(0, 0, 0, 0.08); color: var(--pb-ink); }
+/* when a row left the board: Archived (a written note) or Dismissed (an app note), then the date */
+.pb-c-when { white-space: nowrap; }
+.pb-state { display: inline-flex; align-items: center; gap: 5px; margin-right: 8px; padding: 1px 8px 1px 6px; border-radius: 999px; font-size: 12px; line-height: 18px; white-space: nowrap; vertical-align: middle; }
+.pb-state svg { width: 13px; height: 13px; flex: none; }
+.pb-state--archived { background: color-mix(in srgb, var(--pb-done) 16%, transparent); color: var(--pb-fg); }
+.pb-state--archived svg { color: var(--pb-done); }
+.pb-state--dismissed { border: 1px dashed rgba(127, 127, 127, 0.55); padding: 0 7px 0 5px; color: var(--pb-muted); cursor: help; }
+/* All · Archived · Dismissed, next to the text filter */
+.pb-seg { display: inline-flex; padding: 2px; border: 1px solid var(--pb-glass-border); border-radius: 9px; background: rgba(127, 127, 127, 0.08); }
+.pb-seg[hidden] { display: none; }
+.pb-seg-btn { display: inline-flex; align-items: center; gap: 6px; background: none; border: 0; border-radius: 7px; padding: 4px 10px; color: var(--pb-muted); font: 13px var(--pb-ui-font); cursor: pointer; }
+.pb-seg-btn:hover { color: var(--pb-fg); }
+.pb-seg-btn[aria-pressed="true"] { background: var(--pb-accent-soft); color: var(--pb-fg); font-weight: 600; }
+.pb-seg-btn .pb-count { font-weight: 400; }
+.pb-arch-when { white-space: nowrap; color: var(--pb-muted); font-variant-numeric: tabular-nums; }
+.pb-c-acts { text-align: right; white-space: nowrap; }
+.pb-textbtn { background: none; border: 0; padding: 4px 8px; border-radius: 6px; font: 600 13px var(--pb-ui-font); color: var(--pb-accent); cursor: pointer; }
+.pb-textbtn:hover { color: var(--pb-link-hover); }
+.pb-textbtn--danger { color: var(--pb-danger); }
+.pb-confirm { font-size: 13px; color: var(--pb-fg); margin-right: 2px; }
+.pb-row--leaving td { opacity: 0; }
+.pb-arch-none { display: grid; justify-items: center; text-align: center; gap: 6px; padding: 64px 20px; color: var(--pb-muted); }
+.pb-arch-none svg { width: 52px; height: 52px; opacity: 0.5; }
+.pb-arch-none b { color: var(--pb-fg); font-size: 15px; }
+.pb-arch-none p { margin: 0; max-width: 360px; }
+
+/* ---------- dialogs: the reader, the editor, the settings and the phone's sheet ---------- */
 .pb-dialog {
   width: min(600px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--pb-glass-border); border-radius: var(--pb-radius);
   background: var(--pb-surface); color: var(--pb-surface-fg); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  container: pb-dialog / inline-size;
 }
 .pb-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
 /* a note read whole, big, in the center of the screen; the backdrop fades in and out with it */
@@ -167,10 +388,11 @@
 .pb-form h2 { margin: 0 0 4px; font-size: 18px; }
 /* a form field: its name above the input */
 .pb-form label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; color: var(--pb-muted); }
-.pb-form input, .pb-form textarea {
+.pb-form input, .pb-form textarea, .pb-form select {
   font: 14px var(--pb-ui-font); color: inherit; background: rgba(127, 127, 127, 0.1);
-  border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 8px 10px;
+  border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 8px 10px; min-width: 0;
 }
+.pb-form select option { background: var(--pb-surface); color: var(--pb-surface-fg); }
 .pb-form textarea { resize: vertical; }
 /* boxes and dots are not text fields: none of the field's padding, border or background */
 .pb-form input[type="radio"], .pb-form input[type="checkbox"] { width: 16px; height: 16px; margin: 0; padding: 0; border: 0; background: none; flex: none; accent-color: var(--pb-accent); cursor: pointer; }
@@ -185,12 +407,125 @@
 
 /* the options in the gear: the box or the dot on the left of its text, in one line (not the column of a form field) */
 .pb-expand { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.pb-expand legend { color: inherit; font-weight: 600; margin-bottom: 8px; padding: 0; }
 .pb-form .pb-expand label, .pb-form label.pb-lock { flex-direction: row; align-items: center; gap: 10px; flex: none; margin: 0; color: inherit; text-align: start; cursor: pointer; }
 .pb-form .pb-expand label { margin-left: 16px; }
 
-/* narrow screens: a plain grid, no dragging */
-@container (max-width: 700px) {
+/* the gear at the end of the legend: the board settings */
+.pb-gear { margin-left: auto; background: none; border: 0; border-radius: 6px; padding: 2px 8px; color: var(--pb-muted); font-size: 16px; cursor: pointer; }
+.pb-gear:hover { color: var(--pb-fg); background: rgba(127, 127, 127, 0.14); }
+
+/* ---------- the right-click menu: State or Category ▸, Color ▸, Edit and, last, Archive ---------- */
+.pb-menu {
+  position: fixed; z-index: 2147483050; min-width: 220px; max-width: 300px; max-height: calc(100vh - 8px); overflow-y: auto; box-sizing: border-box; padding: 6px;
+  background: var(--pb-surface); color: var(--pb-surface-fg); border: 1px solid var(--pb-glass-border); border-radius: 10px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); font: 13px var(--pb-ui-font);
+}
+.pb-menu[hidden] { display: none; }
+.pb-menu--sub { min-width: 200px; }
+.pb-menu-h { margin: 2px 8px 6px; color: var(--pb-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-menu hr, .pb-sheet hr { border: 0; border-top: 1px solid var(--pb-glass-border); margin: 6px 4px; }
+.pb-menu-item {
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; column-gap: 9px; align-items: center; width: 100%; box-sizing: border-box;
+  padding: 6px 8px; background: none; border: 0; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer;
+}
+.pb-menu-item small { grid-column: 2 / -1; color: var(--pb-muted); font-size: 12px; line-height: 1.3; }
+.pb-menu-item:hover, .pb-menu-item:focus-visible, .pb-menu-item[aria-expanded="true"] { background: rgba(127, 127, 127, 0.18); outline: none; }
+.pb-menu-item[aria-current] .pb-menu-label { font-weight: 700; }
+.pb-mi-ico { display: inline-grid; place-items: center; width: 16px; height: 16px; font-size: 13px; }
+.pb-mi-ico svg { width: 17px; height: 17px; }
+.pb-mi-val { color: var(--pb-muted); font-size: 12px; max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-mi-chev { color: var(--pb-muted); font-size: 11px; }
+.pb-menu-item--archive .pb-mi-ico { color: var(--pb-done); }
+.pb-menu-item--dismiss .pb-mi-ico { color: var(--pb-muted); }
+
+/* on a phone, the same menu as a sheet from the bottom */
+.pb-dialog--sheet {
+  width: 100vw; max-width: 100vw; margin: auto 0 0; max-height: 82vh; max-height: 82dvh; border-width: 1px 0 0; border-radius: 16px 16px 0 0;
+  animation: pb-sheet-in var(--pb-motion-in) cubic-bezier(0.2, 0, 0, 1) both;
+}
+.pb-dialog--sheet::backdrop { animation: pb-fade-in var(--pb-motion-in) ease both; }
+@keyframes pb-sheet-in { from { transform: translateY(100%); } }
+.pb-sheet { box-sizing: border-box; padding: 8px 10px 14px; font: 15px var(--pb-ui-font); }
+.pb-sheet-grip { width: 38px; height: 4px; border-radius: 4px; background: rgba(127, 127, 127, 0.4); margin: 2px auto 10px; }
+.pb-sheet-h { display: flex; align-items: center; gap: 10px; margin: 0 8px 6px; font-size: 13px; color: var(--pb-muted); min-width: 0; }
+.pb-sheet-h span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pb-sheet-back { background: none; border: 0; padding: 4px 6px 4px 0; color: var(--pb-accent); font: 600 15px var(--pb-ui-font); cursor: pointer; }
+.pb-sheet-back:hover { color: var(--pb-link-hover); }
+.pb-sheet .pb-menu-item { padding: 12px 10px; font-size: 15px; grid-template-columns: 20px minmax(0, 1fr) auto auto; }
+.pb-sheet .pb-mi-val { font-size: 13.5px; }
+.pb-sheet-cancel { width: 100%; margin-top: 6px; }
+
+/* ---------- Board settings: tabs Types · Lanes · View, every option under a titled group ---------- */
+.pb-dialog--settings { width: min(760px, calc(100vw - 32px)); }
+.pb-settings { gap: 14px; padding-bottom: 0; }
+.pb-set-head { display: flex; align-items: center; gap: 10px; }
+.pb-set-head h2 { margin: 0; flex: 1; }
+.pb-x { background: none; border: 0; padding: 0 4px; color: var(--pb-muted); font: 22px/1 var(--pb-ui-font); cursor: pointer; }
+.pb-x:hover { color: var(--pb-surface-fg); }
+.pb-tabs { display: flex; gap: 2px; margin: 0 -18px; padding: 0 12px; border-bottom: 1px solid var(--pb-glass-border); }
+.pb-tab { display: inline-flex; align-items: center; gap: 7px; background: none; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 9px 12px; font: 600 14px var(--pb-ui-font); color: var(--pb-muted); cursor: pointer; transition: color 120ms ease, border-color 120ms ease; }
+.pb-tab:hover { color: var(--pb-surface-fg); }
+.pb-tab[aria-selected="true"] { color: var(--pb-surface-fg); border-bottom-color: var(--pb-accent); }
+.pb-tab:focus-visible { outline: 2px solid var(--pb-accent); outline-offset: -2px; border-radius: 6px 6px 0 0; }
+.pb-tab small { font-weight: 400; font-size: 12px; color: var(--pb-muted); }
+.pb-panel { display: flex; flex-direction: column; gap: 12px; min-height: 340px; }
+.pb-panel[hidden] { display: none; }
+/* Save stays in sight when the dialog scrolls */
+.pb-settings .pb-actions { position: sticky; bottom: 0; z-index: 1; padding: 14px 0 18px; border-top: 1px solid var(--pb-glass-border); background: var(--pb-surface); }
+.pb-group { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.pb-group + .pb-group { border-top: 1px solid var(--pb-glass-border); padding-top: 14px; }
+.pb-group-h { margin: 0; font-size: 14px; font-weight: 600; color: var(--pb-surface-fg); }
+.pb-group > .pb-settings-hint { margin-top: -4px; }
+.pb-settings-hint { margin: 0; color: var(--pb-muted); }
+.pb-types { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-type { display: grid; grid-template-columns: 34px minmax(80px, 1fr) minmax(0, 2fr) auto 28px; gap: 6px; align-items: center; }
+.pb-type input[type="color"] { width: 34px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; }
+.pb-type input[type="color"]:disabled { cursor: not-allowed; opacity: 0.8; }
+.pb-type .pb-icon, .pb-lanerow .pb-icon { color: inherit; background: rgba(127, 127, 127, 0.14); }
+.pb-type .pb-icon:hover, .pb-lanerow .pb-icon:hover { background: rgba(127, 127, 127, 0.26); }
+/* the lock in a type row is an icon, not the "Lock the board size" option that shares its class */
+.pb-type .pb-lock { display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: default; }
+/* the three ways to split the board: cards with a small drawing */
+.pb-modes { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; min-width: 0; }
+.pb-form label.pb-mode { position: relative; display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 4px 10px; align-content: start; padding: 12px; border: 1px solid var(--pb-glass-border); border-radius: 10px; background: rgba(127, 127, 127, 0.05); color: var(--pb-surface-fg); cursor: pointer; transition: border-color 120ms ease, background-color 120ms ease; }
+.pb-form label.pb-mode:hover { background: rgba(127, 127, 127, 0.1); }
+.pb-form label.pb-mode:has(input:checked) { border-color: var(--pb-accent); background: var(--pb-accent-soft); }
+.pb-form label.pb-mode:has(input:focus-visible) { outline: 2px solid var(--pb-accent); outline-offset: 2px; }
+.pb-mode input { margin-top: 1px; }
+.pb-mode b { font-size: 14px; }
+.pb-mode-d { grid-column: 2; color: var(--pb-muted); font-size: 12.5px; line-height: 1.35; }
+.pb-mode-art { grid-column: 2; margin-top: 6px; width: 100%; max-width: 150px; height: 40px; color: var(--pb-muted); opacity: 0.8; }
+.pb-mode:has(input:checked) .pb-mode-art { color: var(--pb-accent); opacity: 1; }
+.pb-lanelist { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-lanerow { display: grid; grid-template-columns: 22px minmax(0, 1fr) 76px 28px 28px 28px; gap: 6px; align-items: center; }
+.pb-lanerow .pb-step { color: var(--pb-muted); font-size: 12px; text-align: center; font-variant-numeric: tabular-nums; }
+.pb-lanecount { color: var(--pb-muted); font-size: 12.5px; white-space: nowrap; }
+.pb-gone { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border: 1px dashed rgba(248, 113, 113, 0.5); border-radius: 8px; color: var(--pb-muted); font-size: 13px; }
+.pb-gone s { color: var(--pb-surface-fg); }
+.pb-gone select { padding: 4px 8px; }
+.pb-warn { margin: 0; color: #d97706; font-size: 13px; }
+
+/* narrow dialogs: the cards stack, the tabs share the width, a type's meaning goes under its name */
+@container pb-dialog (max-width: 560px) {
+  .pb-modes { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .pb-mode-art { display: none; }
+  .pb-tabs { padding: 0 6px; }
+  .pb-tab { flex: 1; justify-content: center; padding: 10px 4px; }
+  .pb-tab small { display: none; }
+  .pb-types { gap: 16px; }
+  .pb-type { grid-template-columns: 34px 1fr auto 28px; }
+  .pb-type [name="description"] { grid-column: 1 / -1; grid-row: 2; }
+  .pb-lanerow { grid-template-columns: 20px minmax(0, 1fr) 28px 28px 28px; }
+  .pb-lanecount { grid-column: 2 / -1; grid-row: 2; margin-top: -2px; }
+  .pb-panel { min-height: 0; }
+}
+/* a phone: the settings come up from the bottom, the whole width */
+@media (max-width: 640px) {
+  .pb-dialog--settings { width: 100vw; max-width: 100vw; margin: auto 0 0; max-height: calc(100dvh - 28px); border-width: 1px 0 0; border-radius: 16px 16px 0 0; animation: pb-sheet-in var(--pb-motion-in) cubic-bezier(0.2, 0, 0, 1) both; }
+}
+
+/* ---------- narrow screens: a plain grid, no dragging; a long press opens a note's menu ---------- */
+@container pb (max-width: 700px) {
   .pb-hint { display: none; }
   .pb-bar { justify-content: flex-end; }
   .pb-bar, .pb-stage, .pb-legend { width: 100%; min-width: 0; }
@@ -198,53 +533,27 @@
   .pb-glass--fixed { height: auto; overflow: visible; }
   .pb-glass { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 14px; padding: 22px 12px 14px; min-height: 0; }
   .pb-glass { --pb-height: auto; }
-  .pb-note { position: relative; left: auto; top: auto; width: auto; min-height: 120px; cursor: default; touch-action: auto; user-select: text; }
+  .pb-note { position: relative; left: auto; top: auto; width: auto; min-height: 120px; cursor: default; touch-action: auto; user-select: none; -webkit-touch-callout: none; }
   .pb-empty { position: static; grid-column: 1 / -1; padding: 24px; text-align: center; }
+  /* lanes: stacked sections whose titles stick to the page; the halo of the Archive box stays inside the glass */
+  .pb-glass--lanes, .pb-glass--lanes.pb-glass--fixed { display: block; padding: 4px 10px 12px; overflow: clip; }
+  .pb-glass--archive { display: block; padding: 12px 12px 6px; }
+  .pb-search { flex: 1 1 100%; }
+  .pb-table thead { display: none; }
+  .pb-table, .pb-table tbody { display: block; }
+  .pb-table tbody tr { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 12px 2px; border-bottom: 1px solid var(--pb-line); }
+  .pb-table tbody tr:last-child { border-bottom: 0; }
+  .pb-table td { display: block; padding: 0; border: 0; }
+  .pb-table tbody tr:hover td { background: none; }
+  .pb-c-note { flex: 1 1 100%; max-width: 100%; width: auto; }
+  .pb-c-when { margin-left: auto; font-size: 12.5px; }
+  .pb-c-acts { flex: 1 1 100%; text-align: left; margin-left: -8px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pb { --pb-motion-in: 0ms; --pb-motion-out: 0ms; }
   .pb-note, .pb-note:hover { transition: none; transform: none; }
-  .pb-dialog::backdrop { animation: none; }
-}
-
-/* the gear at the end of the legend: edit the note types */
-.pb-gear { margin-left: auto; background: none; border: 0; border-radius: 6px; padding: 2px 8px; color: var(--pb-muted); font-size: 16px; cursor: pointer; }
-.pb-gear:hover { color: var(--pb-fg); background: rgba(127, 127, 127, 0.14); }
-
-/* the right-click menu */
-.pb-menu {
-  position: fixed; z-index: 1000; min-width: 220px; max-width: 300px; max-height: calc(100vh - 8px); overflow-y: auto; box-sizing: border-box; padding: 6px;
-  background: var(--pb-surface); color: var(--pb-surface-fg); border: 1px solid var(--pb-glass-border); border-radius: 10px;
-  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); font: 13px var(--pb-ui-font);
-}
-.pb-menu[hidden] { display: none; }
-.pb-menu-h { margin: 2px 8px 6px; color: var(--pb-muted); font-size: 12px; }
-.pb-menu hr { border: 0; border-top: 1px solid var(--pb-glass-border); margin: 6px 4px; }
-.pb-menu-item {
-  display: grid; grid-template-columns: 14px 1fr; column-gap: 9px; align-items: center; width: 100%;
-  padding: 6px 8px; background: none; border: 0; border-radius: 6px; color: inherit; font: inherit; text-align: left; cursor: pointer;
-}
-.pb-menu-item > .pb-menu-label:first-child { grid-column: 1 / -1; }
-.pb-menu-item small { grid-column: 2; color: var(--pb-muted); font-size: 12px; line-height: 1.3; }
-.pb-menu-item:hover, .pb-menu-item:focus-visible { background: rgba(127, 127, 127, 0.18); outline: none; }
-.pb-menu-item[aria-current] .pb-menu-label { font-weight: 700; }
-
-/* the note types dialog */
-.pb-settings-hint { margin: 0; color: var(--pb-muted); }
-.pb-types { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
-.pb-type { display: grid; grid-template-columns: 34px minmax(80px, 1fr) minmax(0, 2fr) auto 28px; gap: 6px; align-items: center; }
-.pb-type input[type="color"] { width: 34px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; }
-.pb-type input[type="color"]:disabled { cursor: not-allowed; opacity: 0.8; }
-.pb-type .pb-icon { color: inherit; background: rgba(127, 127, 127, 0.14); }
-/* the lock in a type row is an icon, not the "Lock the board size" option that shares its class */
-.pb-type .pb-lock { display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: default; }
-.pb-settings .pb-types { padding-bottom: 14px; border-bottom: 1px solid var(--pb-glass-border); }
-/* the board size is another setting: its own section, under a divider like the one below the types */
-.pb-settings label.pb-lock { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
-.pb-settings .pb-actions { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
-@media (max-width: 520px) {
-  .pb-types { gap: 16px; }
-  .pb-type { grid-template-columns: 34px 1fr auto 28px; }
-  .pb-type [name="description"] { grid-column: 1 / -1; grid-row: 2; }
+  .pb-target, .pb-halo, .pb-balloon, .pb-btn, .pb-lane, .pb-lane-h, .pb-tab, .pb-fold, .pb-sec-h .pb-chev, .pb-table td { transition: none; }
+  .pb-dialog::backdrop, .pb-target, .pb-halo, .pb-target--gulp svg, .pb-badge--bump, .pb-lane-h.pb-lane--flash, .pb-toast, .pb-toast-bar,
+  .pb-note--enter, .pb-dialog--sheet, .pb-dialog--sheet::backdrop, .pb-dialog--settings { animation: none; }
 }

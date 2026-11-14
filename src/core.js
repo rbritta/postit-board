@@ -15,7 +15,7 @@ export const DEFAULT_COLORS = Object.freeze({
   gray: '#e5e7eb',
 });
 
-export const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32, label: 40, description: 160, legend: 24 });
+export const LIMITS = Object.freeze({ title: 120, text: 2000, url: 2048, linkLabel: 80, color: 32, label: 40, description: 160, legend: 24, lanes: 12, laneId: 64, laneName: 40, signature: 100 });
 
 const COLOR_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 
@@ -44,11 +44,86 @@ export function normalizeSize(size) {
 /** How a note with cut text shows the rest: opened big in the center, grown in place on hover, or a "more" link. */
 export const EXPAND = Object.freeze(['center', 'inplace', 'more']);
 
-/** The board view people chose in the gear: `{ expand }`. Unknown values become null (the app default). */
+/**
+ * The board view people chose in the gear: `{ expand, archiveBox }`. `archiveBox` says whether the Archive box
+ * shows up while a note is dragged. Unknown values become null (the app default).
+ */
 export function normalizeView(view) {
   const v = view && typeof view === 'object' ? view : {};
-  return { expand: EXPAND.includes(v.expand) ? v.expand : null };
+  return { expand: EXPAND.includes(v.expand) ? v.expand : null, archiveBox: typeof v.archiveBox === 'boolean' ? v.archiveBox : null };
 }
+
+/** Lanes split the board into columns: by state (a Kanban) or by category. Off by default. */
+export const LANE_MODES = Object.freeze(['states', 'categories']);
+/** The lanes each mode starts with. The board names them from its strings (laneTodo, laneWork…). */
+export const LANE_PRESETS = Object.freeze({ states: Object.freeze(['todo', 'doing', 'waiting', 'done']), categories: Object.freeze(['work', 'home', 'ideas']) });
+
+const laneKey = (v) => (typeof v === 'string' || typeof v === 'number' ? String(v).trim().slice(0, LIMITS.laneId) : '');
+
+/** A list of lanes, left to right: `[{ id, name }]`, ids unique, at most LIMITS.lanes. Null when none is usable. */
+function laneList(list) {
+  if (!Array.isArray(list)) return null;
+  const seen = new Set();
+  const out = [];
+  for (const item of list) {
+    const id = laneKey(item?.id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: text(item.name, LIMITS.laneName).trim() });
+    if (out.length >= LIMITS.lanes) break;
+  }
+  return out.length ? out : null;
+}
+
+/**
+ * The lanes of a board: `{ mode, states?, categories? }`. `mode` is 'off' (the default), 'states' or
+ * 'categories'; each mode keeps its own list of `{ id, name }`, left to right. A list left out means the
+ * preset one, and an empty name is filled by the board.
+ */
+export function normalizeLanes(lanes) {
+  const l = lanes && typeof lanes === 'object' ? lanes : {};
+  const out = { mode: LANE_MODES.includes(l.mode) ? l.mode : 'off' };
+  for (const m of LANE_MODES) {
+    const list = laneList(l[m]);
+    if (list) out[m] = list;
+  }
+  return out;
+}
+
+/**
+ * A note's lane in each mode: `{ states?, categories? }` (lane ids). A string means the same lane in both
+ * modes, which is handy for app notes. Null when it says nothing.
+ */
+export function normalizeLaneOf(value) {
+  if (typeof value === 'string' || typeof value === 'number') {
+    const id = laneKey(value);
+    return id ? { states: id, categories: id } : null;
+  }
+  if (!value || typeof value !== 'object') return null;
+  const out = {};
+  for (const m of LANE_MODES) {
+    const id = laneKey(value[m]);
+    if (id) out[m] = id;
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** Where a note sits inside its lane, in each mode: `{ states?: { x, y } }`, x 0..1 of the lane's free width, y px. */
+export function normalizeLanePos(value) {
+  if (!value || typeof value !== 'object') return null;
+  const out = {};
+  for (const m of LANE_MODES) {
+    const p = value[m];
+    if (!p || typeof p !== 'object') continue;
+    const x = num(p.x);
+    const y = num(p.y);
+    if (x !== null && y !== null) out[m] = { x: clamp(x, 0, 1), y: Math.max(0, Math.round(y)) };
+  }
+  return Object.keys(out).length ? out : null;
+}
+
+/** `fillText('Moved to {lane}', { lane: 'Doing' })`: a string with its blanks filled. Escape the result before rendering it. */
+export const fillText = (template, values = {}) => String(template ?? '').replace(/\{(\w+)\}/g, (m, k) => (k in values ? String(values[k]) : m));
 
 /**
  * A legend as the board and the stores keep it: `[{ color, label, description?, hex?, locked? }]`.
@@ -162,6 +237,8 @@ export function normalizeNote(note, { auto = false } = {}) {
     link: safeUrl(n.link),
     linkLabel: text(n.linkLabel, LIMITS.linkLabel),
     image: safeUrl(n.image),
+    lane: normalizeLaneOf(n.lane),
+    lanePos: normalizeLanePos(n.lanePos),
   };
   if (auto && !out.key) throw new Error('an automatic note needs a key');
   return out;
@@ -169,6 +246,32 @@ export function normalizeNote(note, { auto = false } = {}) {
 
 export const refOf = (note) => (note.auto ? { key: note.key } : { id: note.id });
 export const refId = (ref) => (ref.key != null ? `key:${ref.key}` : `id:${ref.id}`);
+
+/**
+ * The signature of what the app sent for an app note: its title, text, due time, link and color, as a short
+ * string (`s1:` and a hash). Dismissing an app note stores this with its key (`dismissed`); the note stays
+ * hidden while the app sends the same content, and shows again when the content changes.
+ */
+export function autoSignature(note) {
+  const n = note || {};
+  const raw = JSON.stringify([text(n.title, LIMITS.title).trim(), text(n.text, LIMITS.text).trim(), normalizeDue(n.due), safeUrl(n.link), isColorKey(n.color) ? n.color : 'yellow']);
+  // cyrb53: small and stable, the same in Node and in every browser
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < raw.length; i += 1) {
+    const c = raw.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507);
+  h1 ^= Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507);
+  h2 ^= Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `s1:${(4294967296 * (2097151 & h2) + (h1 >>> 0)).toString(36)}`;
+}
+
+/** A stored `dismissed` signature: text up to LIMITS.signature characters, or null. */
+export const normalizeSignature = (value) => (typeof value === 'string' && value.trim() ? value.trim().slice(0, LIMITS.signature) : null);
 
 /** Notes without a saved position flow into a grid, left to right, top to bottom. */
 export function autoPlace(notes, { columns = 4, rowHeight = 235, top = 26, gap = 0.012 } = {}) {
@@ -181,11 +284,11 @@ export function autoPlace(notes, { columns = 4, rowHeight = 235, top = 26, gap =
   });
 }
 
-/** Automatic notes come from the app on every render; only their position is stored, by key. */
+/** Automatic notes come from the app on every render; only their position is stored, by key (in lanes too). */
 export function withPositions(autoNotes, positions = {}) {
   return autoNotes.map((n) => {
     const saved = positions[n.key];
-    return saved ? { ...n, x: num(saved.x), y: num(saved.y), z: num(saved.z) ?? 0 } : n;
+    return saved ? { ...n, x: num(saved.x), y: num(saved.y), z: num(saved.z) ?? 0, lanePos: normalizeLanePos(saved.lanePos) } : n;
   });
 }
 
@@ -194,33 +297,89 @@ export const boardHeight = (notes, { min = 560, noteHeight = 250 } = {}) =>
 
 const DAY = 86_400_000;
 
-/** 'overdue' | 'today' | 'soon' (next 7 days) | 'later' | null, compared in local time. */
-export function dueStatus(due, now = new Date()) {
+/**
+ * Dates and times follow the browser (its language, its time zone, its 12 or 24 hours) unless the app
+ * passes `locale`, `timeZone` or `hour12`. A locale or a zone the runtime does not know falls back to the
+ * runtime's own, one at a time, instead of throwing.
+ */
+const FORMATTERS = new Map();
+function formatter(locale, options) {
+  const key = JSON.stringify([locale ?? null, options]);
+  let f = FORMATTERS.get(key);
+  if (!f) {
+    const { timeZone: _zone, ...anyZone } = options;
+    for (const [l, o] of [[locale, options], [undefined, options], [locale, anyZone], [undefined, anyZone]]) {
+      try { f = new Intl.DateTimeFormat(l, o); break; } catch { /* try the next fallback */ }
+    }
+    FORMATTERS.set(key, f);
+  }
+  return f;
+}
+
+/** The calendar day of a time as a day number, in `timeZone` (default: the runtime's). */
+function dayNumber(at, timeZone) {
+  const parts = Object.fromEntries(formatter('en-CA', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    .formatToParts(at).map((p) => [p.type, p.value]));
+  return Date.UTC(Number(parts.year), Number(parts.month) - 1, Number(parts.day)) / DAY;
+}
+
+/** Whether the locale writes `5:30 PM` (12 hours) rather than `17:30`, as its own clock does. */
+function usesTwelveHours(locale, timeZone) {
+  const cycle = formatter(locale, { timeZone, hour: 'numeric' }).resolvedOptions().hourCycle;
+  return cycle === 'h11' || cycle === 'h12';
+}
+
+/** 'overdue' | 'today' | 'soon' (next 7 days) | 'later' | null, the days counted in `timeZone`. */
+export function dueStatus(due, now = new Date(), { timeZone } = {}) {
   if (!due) return null;
   const at = new Date(due);
   if (Number.isNaN(at.getTime())) return null;
   if (at <= now) return 'overdue';
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.floor((at - startOfToday) / DAY);
+  const days = dayNumber(at, timeZone) - dayNumber(now, timeZone);
   if (days === 0) return 'today';
   return days < 7 ? 'soon' : 'later';
 }
 
-/** "Today 18:00", "Tomorrow 09:30", "Fri 14:00" or "Nov 20, 14:00", in the given locale. */
-export function formatDue(due, { locale = 'en', now = new Date(), words = {} } = {}) {
+/**
+ * "Today 18:00", "Tomorrow 9:30 AM", "Fri 14:00" or "Nov 20, 14:00". The locale picks the words of the
+ * date and 12 or 24 hours; `hour12` forces one; `timeZone` says which day and hour it is.
+ */
+export function formatDue(due, { locale, timeZone, hour12, now = new Date(), words = {} } = {}) {
   if (!due) return '';
   const at = new Date(due);
   if (Number.isNaN(at.getTime())) return '';
-  const time = at.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
-  const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-  const days = Math.floor((at - startOfToday) / DAY);
+  const time = clockTime(at, { locale, timeZone, hour12 });
+  const days = dayNumber(at, timeZone) - dayNumber(now, timeZone);
   if (days === 0) return `${words.today ?? 'Today'} ${time}`;
   if (days === 1) return `${words.tomorrow ?? 'Tomorrow'} ${time}`;
   if (days === -1) return `${words.yesterday ?? 'Yesterday'} ${time}`;
-  if (days > 1 && days < 7) return `${at.toLocaleDateString(locale, { weekday: 'short' })} ${time}`;
-  const sameYear = at.getFullYear() === now.getFullYear();
-  const date = at.toLocaleDateString(locale, { day: 'numeric', month: 'short', ...(sameYear ? {} : { year: 'numeric' }) });
+  if (days > 1 && days < 7) return `${formatter(locale, { timeZone, weekday: 'short' }).format(at)} ${time}`;
+  const year = (d) => formatter('en-CA', { timeZone, year: 'numeric' }).format(d);
+  const date = formatter(locale, { timeZone, day: 'numeric', month: 'short', ...(year(at) === year(now) ? {} : { year: 'numeric' }) }).format(at);
   return `${date}, ${time}`;
+}
+
+/** The hour of a time, in 12 or 24 hours as the locale writes it, unless `hour12` says. */
+function clockTime(at, { locale, timeZone, hour12 }) {
+  const twelve = typeof hour12 === 'boolean' ? hour12 : usesTwelveHours(locale, timeZone);
+  return formatter(locale, twelve ? { timeZone, hour: 'numeric', minute: '2-digit', hour12: true }
+    : { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(at);
+}
+
+/**
+ * When something happened (a note archived): "Today 9:30 AM", "Yesterday 18:00", "Thu 21:33" within the
+ * week, then the date alone ("Nov 4", with the year when it is another one). Same options as `formatDue`.
+ */
+export function formatWhen(when, { locale, timeZone, hour12, now = new Date(), words = {} } = {}) {
+  if (!when) return '';
+  const at = new Date(when);
+  if (Number.isNaN(at.getTime())) return '';
+  const days = dayNumber(now, timeZone) - dayNumber(at, timeZone);
+  if (days === 0) return `${words.today ?? 'Today'} ${clockTime(at, { locale, timeZone, hour12 })}`;
+  if (days === 1) return `${words.yesterday ?? 'Yesterday'} ${clockTime(at, { locale, timeZone, hour12 })}`;
+  if (days > 1 && days < 7) return `${formatter(locale, { timeZone, weekday: 'short' }).format(at)} ${clockTime(at, { locale, timeZone, hour12 })}`;
+  const year = (d) => formatter('en-CA', { timeZone, year: 'numeric' }).format(d);
+  return formatter(locale, { timeZone, day: 'numeric', month: 'short', ...(year(at) === year(now) ? {} : { year: 'numeric' }) }).format(at);
 }
 
 /** `<input type="datetime-local">` speaks local time without a zone; these convert both ways. */
