@@ -97,7 +97,7 @@ test('renders notes, legend counts and due chips', async (t) => {
 
 test('due times follow the browser\'s language, zone and clock unless the app sets locale, timeZone or hour12', async (t) => {
   if (!browser) return t.skip('no browser');
-  const { p, ctx, errors } = await page(1200, { locale: 'pt-BR' });
+  const { p, ctx, errors } = await page(1200, { locale: 'en-GB' });
   await p.clock.setFixedTime(new Date(2026, 10, 13, 9, 0));
   const due = new Date(2026, 10, 20, 15, 30).toISOString();
   await mount(p, { notes: [{ id: 1, title: 'Call', text: 'x', due }] });
@@ -770,9 +770,9 @@ test('configure() changes strings, size and view after mounting; destroy() leave
   if (!browser) return t.skip('no browser');
   const { p, ctx, errors } = await page(1400);
   await mount(p, { notes: [{ id: 1, title: 'One', text: 'one' }] });
-  await p.evaluate(() => window.B.configure({ strings: { add: '+ Nota', hint: 'Arraste as notas' }, view: { expand: 'more' }, size: { width: 0.5 } }));
-  assert.equal(await p.textContent('[data-pb=add]'), '+ Nota');
-  assert.equal(await p.textContent('.pb-hint'), 'Arraste as notas');
+  await p.evaluate(() => window.B.configure({ strings: { add: '+ Add one', hint: 'Move the notes freely' }, view: { expand: 'more' }, size: { width: 0.5 } }));
+  assert.equal(await p.textContent('[data-pb=add]'), '+ Add one');
+  assert.equal(await p.textContent('.pb-hint'), 'Move the notes freely');
   assert.equal(await p.getAttribute('#b', 'data-expand'), 'more');
   const share = await p.$eval('.pb-stage', (e) => e.getBoundingClientRect().width / e.closest('.pb').getBoundingClientRect().width);
   assert.ok(near(share, 0.5, 0.01), `width: ${share}`);

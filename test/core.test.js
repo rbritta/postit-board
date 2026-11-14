@@ -70,8 +70,8 @@ test('dueStatus and formatDue read the day in local time', () => {
   assert.equal(formatDue(new Date(2026, 10, 14, 9, 30), { now, locale: 'en-US' }), 'Tomorrow 9:30 AM');
   assert.equal(formatDue(new Date(2026, 10, 14, 9, 30), { now, locale: 'en-GB' }), 'Tomorrow 09:30');
   assert.equal(formatDue(new Date(2026, 10, 14, 9, 30), { now, locale: 'en-US', hour12: false }), 'Tomorrow 09:30');
-  assert.match(formatDue(new Date(2026, 10, 14, 21, 30), { now, locale: 'pt-BR', hour12: true }), /^Tomorrow 9:30/);
-  assert.match(formatDue(new Date(2026, 10, 13, 18, 0), { now, locale: 'pt-BR', words: { today: 'Hoje' } }), /^Hoje 18:00/);
+  assert.match(formatDue(new Date(2026, 10, 14, 21, 30), { now, locale: 'en-GB', hour12: true }), /^Tomorrow 9:30/);
+  assert.match(formatDue(new Date(2026, 10, 13, 18, 0), { now, locale: 'en-GB', words: { today: 'Due today' } }), /^Due today 18:00/);
   assert.match(formatDue(new Date(2027, 0, 5, 8, 0), { now, locale: 'en-US' }), /2027/);
   assert.ok(formatDue(new Date(2026, 10, 14, 9, 30), { now, locale: 'xx-NOPE', timeZone: 'Bad/Zone' }).length > 0, 'a bad locale or zone falls back');
 });
@@ -188,7 +188,7 @@ test('formatWhen says when a note was archived: today, yesterday, the weekday, t
   const opts = { locale: 'en-US', now, hour12: true };
   const sp = (s) => s.replace(/\s/g, ' ');
   assert.equal(sp(formatWhen(new Date(2026, 10, 13, 9, 30), opts)), 'Today 9:30 AM');
-  assert.equal(sp(formatWhen(new Date(2026, 10, 12, 21, 5), { ...opts, words: { yesterday: 'Ontem' } })), 'Ontem 9:05 PM');
+  assert.equal(sp(formatWhen(new Date(2026, 10, 12, 21, 5), { ...opts, words: { yesterday: 'The day before' } })), 'The day before 9:05 PM');
   assert.equal(sp(formatWhen(new Date(2026, 10, 10, 8, 0), opts)), 'Tue 8:00 AM');
   assert.equal(formatWhen(new Date(2026, 9, 2, 8, 0), opts), 'Oct 2');
   assert.equal(formatWhen(new Date(2025, 9, 2, 8, 0), opts), 'Oct 2, 2025');

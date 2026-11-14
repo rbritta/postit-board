@@ -100,8 +100,8 @@ No bundler and no modules? Use the classic build, which defines `window.PostitBo
 | `notes` | `[]` | Written notes, if you load them yourself instead of `reload()`. |
 | `lanes` | off | `{ mode: 'off' \| 'states' \| 'categories', states?, categories? }`, each list `[{ id, name }]` left to right. Left out, a list is the preset one (To do, Doing, Waiting, Done; Work, Home, Ideas). What people set in the gear wins. |
 | `colors` | built-in | Extra or replaced colors: `{ coral: '#fecaca' }`. Keys are lowercase. |
-| `strings` | English | Every visible word, e.g. `{ add: '+ Nota', archive: 'Arquivar', today: 'Hoje', showMore: 'Mais {n}' }`. See `DEFAULT_STRINGS`; `{n}`, `{title}`, `{lane}` are filled in. |
-| `locale` | browser | Language of the due times (`'pt-BR'`, `'en-GB'`…). See [Dates and times](#dates-and-times). |
+| `strings` | English | Every visible word, e.g. `{ add: '+ Add a note', archive: 'Done', today: 'Due today', showMore: '{n} more' }`, or a translation. See `DEFAULT_STRINGS`; `{n}`, `{title}`, `{lane}` are filled in. |
+| `locale` | browser | Language of the due times (`'en-GB'`, `'en-US'`…). See [Dates and times](#dates-and-times). |
 | `timeZone` | browser | Time zone the due times are read in, e.g. `'America/Sao_Paulo'`. |
 | `hour12` | the locale's | `true` for `5:30 PM`, `false` for `17:30`; left out, the locale decides. |
 | `defaultColor` | `yellow` | Color of a new note. |
@@ -208,13 +208,13 @@ await store.load();  // { notes, positions: { disk: { x, y, z, lanePos?, dismiss
 By default the board reads due times the way the person's browser does: in its language, in its time zone and with its clock (12 or 24 hours). Nothing to set for that. An app that wants something else says so with three options, at creation or later with `configure`:
 
 ```js
-createBoard(el, { locale: 'pt-BR', strings: { today: 'Hoje', tomorrow: 'Amanhã' } }); // "Amanhã 17:30", "sex. 09:00"
+createBoard(el, { locale: 'en-GB', strings: { today: 'Due today', tomorrow: 'Due tomorrow' } }); // "Due tomorrow 17:30", "Fri 09:00"
 createBoard(el, { timeZone: 'America/Sao_Paulo' });     // which day is "Today" and which hour, wherever the browser is
 createBoard(el, { locale: 'en-US', hour12: false });    // American words with a 24-hour clock
 board.configure({ timeZone: 'UTC' });                    // change it later; the chips redraw at once
 ```
 
-- `locale` picks the words of the date (`Fri`, `20 nov.`) and, unless `hour12` says otherwise, 12 or 24 hours as that language writes them. The words "Today", "Tomorrow" and "Yesterday" are `strings` (`today`, `tomorrow`, `yesterday`).
+- `locale` picks the words of the date (`Fri`, `20 Nov`) and, unless `hour12` says otherwise, 12 or 24 hours as that language writes them. The words "Today", "Tomorrow" and "Yesterday" are `strings` (`today`, `tomorrow`, `yesterday`).
 - `timeZone` decides the day as well as the hour: a note due at 01:30 UTC is "Tomorrow 01:30" in London and "Today 22:30" in São Paulo.
 - A locale or a zone the browser does not know falls back to the browser's own instead of breaking the board.
 - The date field in the editor is the browser's `datetime-local`, which always speaks the browser's own zone.
