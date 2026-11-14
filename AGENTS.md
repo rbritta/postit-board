@@ -34,4 +34,6 @@ Use the CSS from `src/` (ESM) or `dist/` (script tag). Never copy the library co
 - `onChange` events with `type: 'legend'` have no `note`: handlers that read `event.note` must check the type first.
 - No runtime dependencies. No build step for ESM users. After changing `src/`, run `npm run build` and commit `dist/`.
 - Everything rendered is escaped with `escapeHtml` or `linkify`. URLs go through `safeUrl`. Keep it that way.
+- No `style` attribute in markup and no inline handlers: a strict CSP drops them. Render the HTML, then set custom properties with `el.style.setProperty` (`paintNote`, `paintSwatches`). A browser test loads the board under such a CSP.
+- Transitions take their length from `duration('in' | 'out')` (the `--pb-motion-*` properties, 0 with reduced motion) and must work with 0. A drag measures at pointerdown and only writes while it moves. Redraws go through `requestRender()`, which waits for a drag or a resize to end.
 - Run `npm test` before committing. If the look changed, run `npm run screenshots` and commit `docs/`.

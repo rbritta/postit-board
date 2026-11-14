@@ -48,6 +48,17 @@ test('the store refuses what the board would never send', () => {
   assert.deepEqual(n.meta, { patient: 12 });
 });
 
+test('a note without a place yet (x and y null, as on a narrow screen) is kept, and only z must be a number', () => {
+  const store = createSqliteStore(new DatabaseSync(':memory:'));
+  const n = store.create({ text: 'made on a phone', color: 'green', x: null, y: null, z: 1 });
+  assert.equal(n.x, null);
+  assert.equal(n.y, null);
+  assert.equal(store.update({ id: n.id }, { x: 0.25, y: 40 }).x, 0.25);
+  assert.equal(store.update({ id: n.id }, { x: null, y: null }).x, null, 'back to the grid');
+  assert.throws(() => store.create({ text: 'x', z: null }), /z must be a number/);
+  assert.throws(() => store.create({ text: 'x', x: 'left' }), /x must be a number/);
+});
+
 test('a due note rings once; moving the time rings again', async () => {
   const now = clock();
   const store = createSqliteStore(new DatabaseSync(':memory:'), { now });
@@ -90,6 +101,9 @@ test('restStore and the HTTP handler speak the same routes', async () => {
   try {
     const client = restStore(`${base}/api/postits/`);
     const created = await client.create({ title: 'Lorem', text: 'ipsum', color: 'blue' });
+    const unplaced = await client.create({ text: 'from a phone', color: 'green', x: null, y: null, z: 2 });
+    assert.equal(unplaced.x, null, 'the HTTP route takes a note with no place yet');
+    await client.update({ id: unplaced.id }, { removed: true });
     await client.update({ id: created.id }, { text: 'changed' });
     await client.update({ key: 'auto:x y' }, { x: 0.5, y: 10 });
     const data = await client.load();
@@ -111,4 +125,52 @@ test('restStore and the HTTP handler speak the same routes', async () => {
   } finally {
     server.close();
   }
+});
+
+test('the handler answers bad requests with 400 and 413, never a 500 or a reset connection', async () => {
+  const store = createSqliteStore(new DatabaseSync(':memory:'));
+  const handle = createHttpHandler(store);
+  const server = createServer(async (req, res) => { if (!(await handle(req, res))) { res.writeHead(418); res.end(); } });
+  await new Promise((r) => server.listen(0, '127.0.0.1', r));
+  const api = `http://127.0.0.1:${server.address().port}/api/postits`;
+  const call = async (path, method, body) => {
+    const res = await fetch(api + path, { method, body });
+    return [res.status, (await res.json()).error];
+  };
+  try {
+    assert.deepEqual(await call('', 'POST', JSON.stringify({ text: 'x'.repeat(100_000) })), [413, 'body too large']);
+    assert.deepEqual(await call('', 'POST', 'null'), [400, 'the body must be a JSON object']);
+    assert.deepEqual(await call('', 'POST', '[1]'), [400, 'the body must be a JSON object']);
+    assert.deepEqual(await call('', 'POST', '{nope'), [400, 'invalid JSON']);
+    assert.deepEqual(await call('/key/%E0%A4%A', 'PUT', '{}'), [400, 'invalid key']);
+    const { id } = store.create({ text: 'still here' });
+    assert.deepEqual(await call(`/${id}`, 'PATCH', '"text"'), [400, 'the body must be a JSON object']);
+    assert.equal(store.get(id).text, 'still here');
+  } finally {
+    server.close();
+  }
+});
+
+test('a body some framework already read (string, Buffer or object) goes through the same checks', async () => {
+  const store = createSqliteStore(new DatabaseSync(':memory:'));
+  const handle = createHttpHandler(store);
+  const answer = async (body) => {
+    const res = { status: 0, data: null, writeHead(status) { this.status = status; }, end(text) { this.data = JSON.parse(text); } };
+    await handle({ url: '/api/postits', method: 'POST', body }, res);
+    return [res.status, res.data.error ?? res.data.text];
+  };
+  assert.deepEqual(await answer({ text: 'object' }), [201, 'object']);
+  assert.deepEqual(await answer('{"text":"string"}'), [201, 'string']);
+  assert.deepEqual(await answer(Buffer.from('{"text":"buffer"}')), [201, 'buffer']);
+  assert.deepEqual(await answer('{bad'), [400, 'invalid JSON']);
+  assert.deepEqual(await answer(null), [400, 'the body must be a JSON object']);
+});
+
+test('the store refuses a note or a patch that is not an object', () => {
+  const store = createSqliteStore(new DatabaseSync(':memory:'));
+  const { id } = store.create({ text: 'x' });
+  assert.throws(() => store.create(null), { name: 'ValidationError' });
+  assert.throws(() => store.update({ id }, null), { name: 'ValidationError' });
+  assert.throws(() => store.update({ key: 'k' }, []), { name: 'ValidationError' });
+  assert.throws(() => store.create({ text: 'x', link: '/\\evil.example' }), /link/, 'a link that browsers read as another site');
 });

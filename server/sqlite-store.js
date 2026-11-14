@@ -53,6 +53,7 @@ const fromRow = (r) => ({
 
 /** The patch as columns, refusing what the board would never send. */
 function toColumns(patch, { creating = false } = {}) {
+  if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) throw new ValidationError('a note must be an object');
   const cols = {};
   const str = (name, col, max) => {
     if (patch[name] === undefined) return;
@@ -66,8 +67,10 @@ function toColumns(patch, { creating = false } = {}) {
     if (!ok) throw new ValidationError(`${name} must be an http(s) or relative URL`);
     cols[col] = ok;
   };
-  const number = (name, lo, hi) => {
+  // x and y may be null: a note not placed yet (made on a narrow screen, where the board is a plain grid)
+  const number = (name, lo, hi, { nullable = false } = {}) => {
     if (patch[name] === undefined) return;
+    if (patch[name] === null && nullable) { cols[name] = null; return; }
     const n = Number(patch[name]);
     if (patch[name] === null || !Number.isFinite(n)) throw new ValidationError(`${name} must be a number`);
     cols[name] = Math.min(Math.max(n, lo), hi);
@@ -81,10 +84,10 @@ function toColumns(patch, { creating = false } = {}) {
     if (!isColorKey(patch.color)) throw new ValidationError('color must be a lowercase key like "yellow"');
     cols.color = patch.color;
   }
-  number('x', 0, 1);
-  number('y', 0, 1e6);
+  number('x', 0, 1, { nullable: true });
+  number('y', 0, 1e6, { nullable: true });
   number('z', 0, 1e9);
-  if (cols.y !== undefined) cols.y = Math.round(cols.y);
+  if (cols.y != null) cols.y = Math.round(cols.y);
   if (cols.z !== undefined) cols.z = Math.round(cols.z);
   if (patch.due !== undefined) {
     const due = normalizeDue(patch.due);
@@ -176,6 +179,7 @@ export function createSqliteStore(db, { table = 'postits', now = () => new Date(
 
     /** `ref` is `{ id }` for a written note or `{ key }` for the position of an automatic one. */
     update(ref = {}, patch = {}) {
+      if (patch === null || typeof patch !== 'object' || Array.isArray(patch)) throw new ValidationError('a patch must be an object');
       if (ref.key != null) {
         const key = String(ref.key).slice(0, 200);
         const cols = toColumns({ x: patch.x, y: patch.y, z: patch.z });

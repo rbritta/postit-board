@@ -18,6 +18,15 @@ test('safeUrl keeps http(s) and relative links, refuses script schemes', () => {
   assert.equal(safeUrl(42), null);
 });
 
+test('safeUrl refuses the spellings browsers turn into another site', () => {
+  // browsers read a backslash as a slash and drop tabs and line breaks: all three mean //evil.example
+  assert.equal(safeUrl('/\\evil.example'), null);
+  assert.equal(safeUrl('/\t/evil.example'), null);
+  assert.equal(safeUrl('/\n/evil.example'), null);
+  assert.equal(safeUrl('https://example.com/a\tb'), null);
+  assert.equal(safeUrl('/docs/a\\b'), '/docs/a\\b', 'a backslash later in the path stays on this site');
+});
+
 test('linkify escapes the text and links bare URLs without trailing punctuation', () => {
   const html = linkify('See <b>this</b>: https://example.com/x, then stop.');
   assert.match(html, /&lt;b&gt;this&lt;\/b&gt;/);

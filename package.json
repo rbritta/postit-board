@@ -1,6 +1,6 @@
 {
   "name": "postit-board",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "description": "A glass board of draggable sticky notes with a color legend, due times and app-generated notes. Zero dependencies, vanilla JS, with a SQLite store for Node.",
   "keywords": ["sticky-notes", "post-it", "kanban", "board", "dashboard", "vanilla-js", "sqlite", "no-dependencies"],
   "homepage": "https://github.com/rbritta/postit-board",

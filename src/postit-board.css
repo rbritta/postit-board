@@ -8,11 +8,17 @@
   --pb-accent: #68aff1;
   --pb-accent-ink: #0d1117;
   --pb-danger: #f87171;
+  --pb-surface: #161b22; /* the dialogs and the right-click menu */
+  --pb-surface-fg: #e6edf3;
+  --pb-link: #1d3a78; /* links on the notes and in the reader */
+  --pb-link-hover: #6e7681;
   --pb-radius: 14px;
   --pb-note-width: min(220px, 23%);
   --pb-note-min-height: 140px;
   --pb-title-lines: 2;
   --pb-text-lines: 4;
+  --pb-motion-in: 240ms; /* a note opening, the reader growing out of its note */
+  --pb-motion-out: 180ms; /* and going back, a little faster */
   --pb-font: "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --pb-ui-font: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   container-type: inline-size;
@@ -26,6 +32,8 @@
   --pb-muted: #6b7280;
   --pb-accent: #1d4ed8;
   --pb-accent-ink: #fff;
+  --pb-surface: #fff;
+  --pb-surface-fg: #1f2937;
 }
 
 .pb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -60,16 +68,18 @@
 .pb--resizable .pb-resize { display: block; }
 .pb-resize:hover, .pb--sizing .pb-resize { opacity: 1; }
 .pb--sizing { user-select: none; }
-.pb-lock { display: flex; align-items: center; gap: 8px; color: var(--pb-fg); cursor: pointer; margin: 4px 0 2px; }
-/* the rest of a cut note: click (center), hover (in place) or the "more" link */
+
+/* the rest of a cut note: click (center), hover or keyboard focus (in place), or the "more" link */
 .pb[data-expand="center"] .pb-note { cursor: pointer; }
 .pb[data-expand="center"] .pb-note:active { cursor: grabbing; }
-.pb-note--open .pb-title, .pb-note--open .pb-text,
-.pb[data-expand="inplace"] .pb-note--cut:is(:hover, :focus-within) .pb-title,
-.pb[data-expand="inplace"] .pb-note--cut:is(:hover, :focus-within) .pb-text { -webkit-line-clamp: unset; line-clamp: none; display: block; }
-.pb[data-expand="inplace"] .pb-note--cut:is(:hover, :focus-within), .pb-note--open { z-index: 9000 !important; box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55); }
-.pb-more { align-self: flex-start; background: none; border: 0; padding: 0; font: 600 13px var(--pb-ui-font); color: rgba(0, 0, 0, 0.55); cursor: pointer; }
-.pb-more:hover { color: #000; }
+/* open shows the whole text; closing keeps it whole while it shrinks back, the "…" returns at the end */
+.pb-note:is(.pb-note--open, .pb-note--closing) :is(.pb-title, .pb-text) { -webkit-line-clamp: unset; line-clamp: none; display: block; }
+.pb-note--open, .pb-note--closing { z-index: 2147483000 !important; }
+.pb-note--open { box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55); }
+/* the note being read in the center: it is the reader that flew there */
+.pb-note--reading { visibility: hidden; }
+.pb-more { align-self: flex-start; background: none; border: 0; padding: 0; font: 600 13px var(--pb-ui-font); color: var(--pb-link); cursor: pointer; }
+.pb-more:hover { color: var(--pb-link-hover); }
 .pb-empty { position: absolute; inset: 0; display: grid; place-items: center; margin: 0; color: var(--pb-muted); }
 
 .pb-note {
@@ -78,10 +88,13 @@
   display: flex; flex-direction: column; gap: 6px; padding: 24px 14px 10px;
   background: var(--pb-note); color: var(--pb-ink); font: 15px/1.35 var(--pb-font);
   transform: rotate(var(--pb-r, 0deg)); box-shadow: 0 10px 22px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.2);
-  cursor: grab; touch-action: none; user-select: none; outline-offset: 3px;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.18s ease;
+  cursor: grab; touch-action: none; user-select: none; outline-offset: 3px; -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, opacity var(--pb-motion-out, 180ms) ease;
 }
-.pb-note:hover { transform: rotate(0deg) scale(1.02); }
+/* only where there is a real hover: on touch screens it would stick after a tap */
+@media (hover: hover) {
+  .pb-note:hover { transform: rotate(0deg) scale(1.02); }
+}
 .pb-note:focus-visible { outline: 2px solid var(--pb-accent); }
 .pb-note--dragging { cursor: grabbing; transform: rotate(0deg) scale(1.05); box-shadow: 0 18px 36px rgba(0, 0, 0, 0.45); transition: none; }
 .pb-note--leaving { opacity: 0; transform: scale(0.9); }
@@ -103,9 +116,14 @@
   display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--pb-text-lines); line-clamp: var(--pb-text-lines); overflow: hidden; }
 .pb-img { width: 100%; height: 110px; object-fit: cover; border-radius: 4px; pointer-events: none; }
 .pb-linkrow { margin: 0; font: 13px var(--pb-ui-font); overflow-wrap: anywhere; }
-.pb-note a { color: #1d3a78; font-weight: 600; }
+.pb-note a, .pb-reader a { color: var(--pb-link); font-weight: 600; text-decoration: none; }
+.pb-note a:hover, .pb-reader a:hover { color: var(--pb-link-hover); }
 
-.pb-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; row-gap: 5px; margin-top: auto; padding-right: 18px; font: 13px var(--pb-ui-font); }
+.pb-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; row-gap: 5px; margin-top: auto; font: 13px var(--pb-ui-font); }
+/* app notes keep room for the folded corner */
+.pb-note--auto .pb-foot { padding-right: 18px; }
+/* edit and done stay together: when the due time leaves no room, both go to the next line */
+.pb-tools { display: inline-flex; gap: 6px; margin-left: auto; }
 .pb-icon { background: rgba(0, 0, 0, 0.09); border: 0; border-radius: 6px; padding: 2px 9px; color: var(--pb-ink); cursor: pointer; font-size: 14px; }
 .pb-icon:hover { background: rgba(0, 0, 0, 0.18); }
 .pb-due { border-radius: 999px; padding: 1px 8px; background: rgba(0, 0, 0, 0.08); white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; box-sizing: border-box; }
@@ -123,44 +141,53 @@
 
 .pb-dialog {
   width: min(600px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--pb-glass-border); border-radius: var(--pb-radius);
-  background: #161b22; color: #e6edf3; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
+  background: var(--pb-surface); color: var(--pb-surface-fg); box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
-.pb[data-theme="light"] .pb-dialog { background: #fff; color: #1f2937; }
 .pb-dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
-/* a note read whole, big, in the center of the screen */
+/* a note read whole, big, in the center of the screen; the backdrop fades in and out with it */
 .pb-dialog--reader { width: min(560px, calc(100vw - 24px)); background: transparent; border: 0; box-shadow: none; overflow: visible; }
+.pb-dialog--reader::backdrop { animation: pb-fade-in var(--pb-motion-in, 240ms) cubic-bezier(0.2, 0, 0, 1) both; }
+.pb-dialog--closing::backdrop { animation: pb-fade-out var(--pb-motion-out, 180ms) cubic-bezier(0.4, 0, 0.2, 1) both; }
+@keyframes pb-fade-in { from { opacity: 0; } }
+@keyframes pb-fade-out { to { opacity: 0; } }
 .pb-reader { position: relative; display: flex; flex-direction: column; gap: 10px; padding: 32px 24px 16px; background: var(--pb-note); color: var(--pb-ink);
-  font: 17px/1.45 var(--pb-font); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6); max-height: calc(100vh - 48px); overflow: auto; box-sizing: border-box; }
+  font: 17px/1.45 var(--pb-font); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.6); max-height: calc(100vh - 48px); max-height: calc(100dvh - 48px); overflow: auto; box-sizing: border-box; }
+.pb-reader:focus { outline: none; }
 .pb-reader::before { content: ''; position: absolute; top: -11px; left: 50%; width: 96px; height: 26px; transform: translateX(-50%) rotate(-2deg); background: rgba(255, 255, 255, 0.5); }
 .pb-reader-title { margin: 0; font-size: 21px; line-height: 1.25; overflow-wrap: anywhere; }
 .pb-reader-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .pb-reader-img { width: 100%; max-height: 50vh; object-fit: contain; border-radius: 4px; }
 .pb-reader-foot { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font: 14px var(--pb-ui-font); }
+.pb-reader-foot .pb-tools { gap: 8px; }
 .pb-reader-foot .pb-btn { background: rgba(0, 0, 0, 0.08); color: var(--pb-ink); border-color: rgba(0, 0, 0, 0.15); padding: 5px 12px; }
 .pb-reader-close { position: absolute; top: 4px; right: 8px; background: none; border: 0; font: 22px var(--pb-ui-font); color: rgba(0, 0, 0, 0.5); cursor: pointer; }
 .pb-reader-close:hover { color: #000; }
-.pb-expand { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
-.pb-expand legend { color: var(--pb-fg); font-weight: 600; margin-bottom: 8px; padding: 0; }
-/* the options in the gear: the box or the dot on the left of its text, in one line (not the column of a form field) */
-.pb-form .pb-expand label, .pb-form label.pb-lock { flex-direction: row; align-items: center; gap: 10px; flex: none; margin: 0; color: var(--pb-fg); text-align: start; cursor: pointer; }
-.pb-form .pb-expand label { margin-left: 16px; }
-.pb-form input[type="radio"], .pb-form input[type="checkbox"] { width: 16px; height: 16px; margin: 0; padding: 0; flex: none; accent-color: var(--pb-accent); cursor: pointer; }
+
 .pb-form { display: flex; flex-direction: column; gap: 12px; padding: 18px; font: 14px var(--pb-ui-font); }
 .pb-form h2 { margin: 0 0 4px; font-size: 18px; }
+/* a form field: its name above the input */
 .pb-form label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; color: var(--pb-muted); }
 .pb-form input, .pb-form textarea {
   font: 14px var(--pb-ui-font); color: inherit; background: rgba(127, 127, 127, 0.1);
   border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 8px 10px;
 }
 .pb-form textarea { resize: vertical; }
+/* boxes and dots are not text fields: none of the field's padding, border or background */
+.pb-form input[type="radio"], .pb-form input[type="checkbox"] { width: 16px; height: 16px; margin: 0; padding: 0; border: 0; background: none; flex: none; accent-color: var(--pb-accent); cursor: pointer; }
 .pb-row { display: flex; gap: 10px; flex-wrap: wrap; }
-.pb-colors { display: flex; flex-wrap: wrap; gap: 6px 14px; border: 0; padding: 0; margin: 0; }
+.pb-colors { display: flex; flex-wrap: wrap; gap: 6px 14px; border: 0; padding: 0; margin: 0; min-width: 0; }
 .pb-colors legend { color: var(--pb-muted); margin-bottom: 6px; padding: 0; }
 .pb-form .pb-choice { flex-direction: row; align-items: center; gap: 6px; flex: none; color: inherit; cursor: pointer; }
 .pb-choice input { position: absolute; opacity: 0; }
 .pb-choice:has(input:checked) .pb-swatch { outline: 2px solid var(--pb-accent); outline-offset: 2px; }
 .pb-choice:has(input:focus-visible) { outline: 2px solid var(--pb-accent); border-radius: 4px; }
 .pb-actions { display: flex; gap: 8px; align-items: center; }
+
+/* the options in the gear: the box or the dot on the left of its text, in one line (not the column of a form field) */
+.pb-expand { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-expand legend { color: inherit; font-weight: 600; margin-bottom: 8px; padding: 0; }
+.pb-form .pb-expand label, .pb-form label.pb-lock { flex-direction: row; align-items: center; gap: 10px; flex: none; margin: 0; color: inherit; text-align: start; cursor: pointer; }
+.pb-form .pb-expand label { margin-left: 16px; }
 
 /* narrow screens: a plain grid, no dragging */
 @container (max-width: 700px) {
@@ -172,11 +199,13 @@
   .pb-glass { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 22px 14px; padding: 22px 12px 14px; min-height: 0; }
   .pb-glass { --pb-height: auto; }
   .pb-note { position: relative; left: auto; top: auto; width: auto; min-height: 120px; cursor: default; touch-action: auto; user-select: text; }
-  .pb-empty { position: static; padding: 24px; }
+  .pb-empty { position: static; grid-column: 1 / -1; padding: 24px; text-align: center; }
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .pb { --pb-motion-in: 0ms; --pb-motion-out: 0ms; }
   .pb-note, .pb-note:hover { transition: none; transform: none; }
+  .pb-dialog::backdrop { animation: none; }
 }
 
 /* the gear at the end of the legend: edit the note types */
@@ -185,11 +214,10 @@
 
 /* the right-click menu */
 .pb-menu {
-  position: fixed; z-index: 1000; min-width: 220px; max-width: 300px; padding: 6px;
-  background: #161b22; color: #e6edf3; border: 1px solid var(--pb-glass-border); border-radius: 10px;
+  position: fixed; z-index: 1000; min-width: 220px; max-width: 300px; max-height: calc(100vh - 8px); overflow-y: auto; box-sizing: border-box; padding: 6px;
+  background: var(--pb-surface); color: var(--pb-surface-fg); border: 1px solid var(--pb-glass-border); border-radius: 10px;
   box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45); font: 13px var(--pb-ui-font);
 }
-.pb[data-theme="light"] .pb-menu { background: #fff; color: #1f2937; }
 .pb-menu[hidden] { display: none; }
 .pb-menu-h { margin: 2px 8px 6px; color: var(--pb-muted); font-size: 12px; }
 .pb-menu hr { border: 0; border-top: 1px solid var(--pb-glass-border); margin: 6px 4px; }
@@ -209,11 +237,12 @@
 .pb-type input[type="color"] { width: 34px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; }
 .pb-type input[type="color"]:disabled { cursor: not-allowed; opacity: 0.8; }
 .pb-type .pb-icon { color: inherit; background: rgba(127, 127, 127, 0.14); }
+/* the lock in a type row is an icon, not the "Lock the board size" option that shares its class */
+.pb-type .pb-lock { display: flex; align-items: center; justify-content: center; font-size: 13px; cursor: default; }
 .pb-settings .pb-types { padding-bottom: 14px; border-bottom: 1px solid var(--pb-glass-border); }
 /* the board size is another setting: its own section, under a divider like the one below the types */
 .pb-settings label.pb-lock { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
 .pb-settings .pb-actions { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
-.pb-type .pb-lock { justify-content: center; margin: 0; font-size: 13px; cursor: default; }
 @media (max-width: 520px) {
   .pb-types { gap: 16px; }
   .pb-type { grid-template-columns: 34px 1fr auto 28px; }

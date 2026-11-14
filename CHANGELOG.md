@@ -1,5 +1,36 @@
 # Changelog
 
+## 0.5.0 (2026-11-13)
+
+Long text opens and closes with smooth transitions, in all three ways:
+
+- **Center.** The note grows out of its own place on the board (keeping its tilt and color on the way) into the reader in the middle of the screen; the words fade in as it lands and the backdrop fades in behind it. Esc, a click outside, × and Done play it back into the note. A note scrolled out of sight, or gone while it was open, fades and scales instead. The note itself takes the focus, so a screen reader starts reading it.
+- **In place.** Hovering a cut note, or reaching it with Tab, grows it to its whole text with a height animation; it shrinks back when the mouse or the focus leaves, and the "…" returns at the end. The board grows with it near the bottom instead of cutting it off.
+- **More.** The link reveals the rest the same way, and "less" rolls it back.
+- 240 ms in, a little faster (180 ms) out, set with `--pb-motion-in` and `--pb-motion-out`. With reduced motion everything changes at once. A drag never opens or animates the notes it passes over, and it measures the page once, when it starts.
+
+Fixes from a review of the whole library:
+
+- **Strict CSP.** Colors and positions are set through the CSSOM instead of `style` attributes, which a strict Content-Security-Policy drops (notes ended up unplaced and gray).
+- **Focus and keyboard.** After a dialog, the menu or a redraw, the focus goes back to the note or button it came from instead of falling to the page. Moving one note with the arrows and then another no longer loses the first move; the arrows keep the note inside the glass and grow the board. The menu reads as radio items with the current type checked; Home, End and Tab work, and Esc gives the focus back to the note.
+- **Pointer.** A drag or a right-click on a scrolled board of fixed height lands under the pointer (it was off by the scroll), and a new note starts exactly at the click (it was 1 px off).
+- **Data during a drag.** `update()` and `reload()` during a drag are drawn when it ends; before, they waited for the next change.
+- **Failures.** When the store fails, a note marked done or deleted comes back (`postit-error` fires, as before). A note dragged before the store answered its creation keeps where it was dragged.
+- **The gear saves only what changed.** Saving only "Long text" or the lock no longer freezes the types over the ones the app ships.
+- **`configure()`** applies `strings` (the bar and "+ Note" too), `addButton`, `size`, `view`, `expand`, `width` and `resizable`. **`destroy()`** removes every listener and leaves the element clean, after saving moves typed with the arrows.
+- **Due times** change from Tomorrow to Today to late in place, without redrawing the board every minute (which closed whatever was open). They use the browser's language when `locale` is not set, as the README says (they were always English).
+- **Narrow to wide.** A board first drawn as a phone grid flows its notes into columns when the window gets wide, instead of leaving them on top of each other. On a phone the empty message spans the glass.
+- **Look.** Links on notes and in the reader have no underline and turn #6e7681 on hover (`--pb-link`, `--pb-link-hover`), the "more" link too. ✎ and ✓ stay together on the right when a due time leaves no room (the ✓ used to wrap alone), and so do Edit and Done in the reader; only app notes keep room for the folded corner. The hover tilt only where there is a real hover (it stuck after a tap), and no tap flash on touch screens. The menu scrolls when there are many types.
+- **CSS.** The class `pb-lock` is no longer styled as two things at once; the dialogs and the menu share `--pb-surface` and `--pb-surface-fg`; boxes and dots in forms lose the text field's border and background.
+- **Accessibility.** A note without a title gives the reader a name; an empty board is not an empty list; the legend is a group, not the page's footer landmark.
+- **Links.** `safeUrl` (and so the server) refuses `/\host` and URLs with tabs or line breaks, which browsers read as another site.
+- **`localStore`** keeps `createdAt` and `meta` when a note is edited, sets `updatedAt`, and `done: false` reopens a note.
+- **Server.** A body over 64 kB gets a 413 (the connection was reset before); a body that is not a JSON object, or a malformed key, gets a 400 (it was a 500). The SQLite store refuses a note or a patch that is not an object.
+- `npm run screenshots` makes every README image (the menu and the gear were missing) plus the reader.
+- A note made on a phone (where the board is a grid and a note has no place yet) is saved again through the HTTP handler: the board leaves x and y out, and the SQLite store takes them as null instead of answering 400.
+
+New, all additive: CSS custom properties `--pb-motion-in`, `--pb-motion-out`, `--pb-link`, `--pb-link-hover`, `--pb-surface`, `--pb-surface-fg`; state classes `pb-note--closing`, `pb-note--reading`, `pb-dialog--closing` and the wrapper `pb-tools` around ✎ ✓.
+
 ## 0.4.1 (2026-11-13)
 
 - The gear dialog looks right again: the "Long text" choices and "Lock the board size" sit on one line each, box or dot on the left, the "Long text" ones indented under their heading, under a divider below the types, and "Lock the board size" gets its own section under another divider, with one more above the buttons. The form-field rule had stacked them and centered them.

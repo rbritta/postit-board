@@ -22,11 +22,6 @@ const COLOR_KEY = /^[a-z][a-z0-9-]{0,31}$/;
 export const isColorKey = (value) => typeof value === 'string' && COLOR_KEY.test(value);
 export const isHex = (value) => typeof value === 'string' && /^#[0-9a-f]{6}$/i.test(value);
 
-/**
- * A legend as the board and the stores keep it: `[{ color, label, description?, hex?, locked? }]`.
- * `color` is the key notes carry; `hex` repaints that key; `locked` marks a type the app owns
- * (its color can't change and it can't be removed, only renamed). Bad entries are dropped.
- */
 /** Board size limits: the width is a share of the space the board has, the height is in pixels. */
 export const SIZE = Object.freeze({ width: 0.8, minWidth: 480, minHeight: 320, maxHeight: 6000 });
 
@@ -55,6 +50,11 @@ export function normalizeView(view) {
   return { expand: EXPAND.includes(v.expand) ? v.expand : null };
 }
 
+/**
+ * A legend as the board and the stores keep it: `[{ color, label, description?, hex?, locked? }]`.
+ * `color` is the key notes carry; `hex` repaints that key; `locked` marks a type the app owns
+ * (its color can't change and it can't be removed, only renamed). Bad entries are dropped.
+ */
 export function normalizeLegend(list) {
   if (!Array.isArray(list)) return [];
   const seen = new Set();
@@ -93,12 +93,16 @@ export function mergeLegend(appLegend, saved) {
 /** Hex overrides from a legend, as a `colors` map: `{ yellow: '#ffcc00' }`. */
 export const legendColors = (legend) => Object.fromEntries(normalizeLegend(legend).filter((i) => i.hex).map((i) => [i.color, i.hex]));
 
-/** Only http(s), relative (`/x`, `./x`, `../x`) and in-page links: never `javascript:` or `data:`. */
+/**
+ * Only http(s), relative (`/x`, `./x`, `../x`) and in-page links: never `javascript:` or `data:`,
+ * and never another site through a protocol-relative link (`//x`, which browsers also read in
+ * `/\x` and in `/<tab>/x`, since they drop tabs and line breaks from URLs).
+ */
 export function safeUrl(value) {
   if (typeof value !== 'string') return null;
   const url = value.trim();
-  if (!url || url.length > LIMITS.url) return null;
-  if (/^(\/(?!\/)|\.{1,2}\/|#|\?)/.test(url)) return url;
+  if (!url || url.length > LIMITS.url || /[\u0000-\u001f\u007f]/.test(url)) return null;
+  if (/^(\/(?![/\\])|\.{1,2}\/|#|\?)/.test(url)) return url;
   return /^https?:\/\/[^\s]+$/i.test(url) ? url : null;
 }
 

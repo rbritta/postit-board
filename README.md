@@ -2,7 +2,7 @@
 
 A glass board of sticky notes for the home screen of your app: people drag notes around, your app pins its own (and takes them down when the problem is gone), and a color legend in the footer says what each color means.
 
-Vanilla JS, zero runtime dependencies, about 37 kB unminified. A SQLite store for Node comes with it.
+Vanilla JS, zero runtime dependencies, about 70 kB unminified (21 kB gzipped), and it runs under a strict Content-Security-Policy. A SQLite store for Node comes with it.
 
 ![The board on a desktop](docs/board.png)
 
@@ -18,8 +18,9 @@ Vanilla JS, zero runtime dependencies, about 37 kB unminified. A SQLite store fo
 - **Due times.** A note can have a due time. The chip turns amber on the day and red when late. On the server, `watchDue` calls you once when the time comes (send a chat message, a push, a calendar event: your call).
 - **Images and links.** A note can show an image, a link with a label, and any bare URL in its text becomes a link.
 - **Phones too.** Below 700 px wide the board becomes a plain grid: no dragging, no horizontal scroll.
-- **Keyboard.** Tab to a note, arrows move it (Shift for bigger steps), Enter edits it.
-- **Safe by default.** Every text is escaped, and only `http(s)` and relative URLs are accepted.
+- **Long text, read whole.** A note whose text is cut ("…") opens big in the center of the screen, growing out of its own place on the board, and goes back into it when you close it. Or, picked in the gear, it grows in place on hover, or gets a "more" link. Every way is a short, smooth transition, and an instant change when the system asks for reduced motion.
+- **Keyboard.** Tab to a note, arrows move it (Shift for bigger steps), Enter opens or edits it, Esc closes and gives the focus back to the note.
+- **Safe by default.** Every text is escaped, only `http(s)` and relative URLs are accepted, and nothing needs inline styles, inline handlers or `eval`, so a strict CSP is fine.
 
 <p>
   <img src="docs/phone.png" alt="The board on a phone" width="240">
@@ -28,6 +29,9 @@ Vanilla JS, zero runtime dependencies, about 37 kB unminified. A SQLite store fo
 <p>
   <img src="docs/menu.png" alt="Right-click menu with the note types" width="380">
   <img src="docs/types.png" alt="The gear: editing the note types" width="380">
+</p>
+<p>
+  <img src="docs/reader.png" alt="A note read whole in the center of the screen" width="520">
 </p>
 
 ## Use it
@@ -91,11 +95,13 @@ No bundler and no modules? Use the classic build, which defines `window.PostitBo
 | `view` | `null` | A saved `{ expand }` to start with, as `store.load()` returns it. |
 | `onError` | `console.error` | Called when the store fails. The board also fires a `postit-error` event. |
 
-The returned board has `update({ notes?, auto?, positions? })`, `reload()`, `configure(options)`, `openEditor(draft?)`, `openSettings()`, `notes`, `legend` and `destroy()`.
+The returned board has `update({ notes?, auto?, positions? })`, `reload()`, `configure(options)` (any option above, applied at once), `openEditor(draft?)`, `openSettings()`, `openNote(ref)`, `notes`, `legend`, `size`, `view` and `destroy()`.
 
 The legend people saved comes back in `store.load()` and is merged over the one you pass (`mergeLegend`): their order, names and colors win, and your `locked` types are always there. A note whose type was removed keeps its color, it just leaves the legend.
 
-Built-in colors: `yellow`, `pink`, `green`, `blue`, `orange`, `purple`, `teal`, `gray`. Styling is plain CSS custom properties on `.pb` (`--pb-accent`, `--pb-note-width`, `--pb-font`, `--pb-text-lines` and `--pb-title-lines` for where long text is cut with "…"…). Add `data-theme="light"` for light pages.
+Built-in colors: `yellow`, `pink`, `green`, `blue`, `orange`, `purple`, `teal`, `gray`. Styling is plain CSS custom properties on `.pb` (`--pb-accent`, `--pb-note-width`, `--pb-font`, `--pb-text-lines` and `--pb-title-lines` for where long text is cut with "…", `--pb-link` and `--pb-link-hover`, `--pb-surface` and `--pb-surface-fg` for the dialogs and the menu…). Add `data-theme="light"` for light pages.
+
+The transitions take `--pb-motion-in` (240 ms, a note opening) and `--pb-motion-out` (180 ms, going back); `0ms` turns them off, and `prefers-reduced-motion: reduce` always does.
 
 ## Server
 

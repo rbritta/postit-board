@@ -8,7 +8,7 @@
  *     ...your other routes
  *   });
  *
- *   GET    /api/postits              -> { notes, positions }
+ *   GET    /api/postits              -> { notes, positions, legend?, size?, view? }
  *   POST   /api/postits              -> the new note
  *   PATCH  /api/postits/:id          -> the note (fields, { done: true } or { removed: true })
  *   PUT    /api/postits/key/:key     -> position of an automatic note { x, y, z }
@@ -16,32 +16,59 @@
  *   PUT    /api/postits/size         -> { size } chosen by dragging the corners
  *   PUT    /api/postits/view         -> { view } how cut text opens (gear)
  *
- * Authentication and CSRF are yours: run your checks before calling `handle`.
+ * Bodies are JSON objects of at most 64 kB. Authentication and CSRF are yours: run your checks
+ * before calling `handle`.
  */
 const MAX_BODY = 64 * 1024;
 
+const httpError = (status, message) => Object.assign(new Error(message), { status });
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+
+function parse(text) {
+  let body;
+  try { body = text ? JSON.parse(text) : {}; } catch { throw httpError(400, 'invalid JSON'); }
+  if (!isObject(body)) throw httpError(400, 'the body must be a JSON object');
+  return body;
+}
+
 function readJson(req) {
-  if (req.body !== undefined) return Promise.resolve(typeof req.body === 'string' ? JSON.parse(req.body || '{}') : req.body);
+  // a framework may have read the body already (Express with express.json(), for one)
+  if (req.body !== undefined) {
+    try {
+      const raw = Buffer.isBuffer(req.body) ? req.body.toString('utf8') : req.body;
+      const body = typeof raw === 'string' ? parse(raw) : raw;
+      if (!isObject(body)) throw httpError(400, 'the body must be a JSON object');
+      return Promise.resolve(body);
+    } catch (err) { return Promise.reject(err); }
+  }
   return new Promise((resolve, reject) => {
     let size = 0;
     const chunks = [];
-    req.on('data', (c) => {
-      size += c.length;
-      if (size > MAX_BODY) { reject(Object.assign(new Error('body too large'), { status: 413 })); req.destroy(); return; }
-      chunks.push(c);
-    });
-    req.on('end', () => {
-      try { resolve(chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {}); } catch {
-        reject(Object.assign(new Error('invalid JSON'), { status: 400 }));
-      }
-    });
+    const onData = (chunk) => {
+      size += chunk.length;
+      if (size <= MAX_BODY) { chunks.push(chunk); return; }
+      // stop collecting, answer 413 and close the connection after it (see send): the client gets the
+      // answer instead of a reset socket
+      req.off('data', onData);
+      req.off('end', onEnd);
+      reject(Object.assign(httpError(413, 'body too large'), { close: true }));
+    };
+    const onEnd = () => {
+      try { resolve(parse(Buffer.concat(chunks).toString('utf8'))); } catch (err) { reject(err); }
+    };
+    req.on('data', onData);
+    req.on('end', onEnd);
     req.on('error', reject);
   });
 }
 
-function send(res, status, data) {
-  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
+function send(res, status, data, { close = false } = {}) {
+  res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...(close ? { connection: 'close' } : {}) });
   res.end(JSON.stringify(data));
+}
+
+function decodeKey(raw) {
+  try { return decodeURIComponent(raw); } catch { throw httpError(400, 'invalid key'); }
 }
 
 export function createHttpHandler(store, { prefix = '/api/postits' } = {}) {
@@ -59,10 +86,10 @@ export function createHttpHandler(store, { prefix = '/api/postits' } = {}) {
       let m = rest.match(/^\/(\d+)$/);
       if (m && req.method === 'PATCH') return send(res, 200, await store.update({ id: Number(m[1]) }, await readJson(req))), true;
       m = rest.match(/^\/key\/([^/]+)$/);
-      if (m && req.method === 'PUT') return send(res, 200, await store.update({ key: decodeURIComponent(m[1]) }, await readJson(req))), true;
+      if (m && req.method === 'PUT') return send(res, 200, await store.update({ key: decodeKey(m[1]) }, await readJson(req))), true;
       send(res, 404, { error: 'not found' });
     } catch (err) {
-      send(res, err.status || 500, { error: err.status ? err.message : 'internal error' });
+      send(res, err.status || 500, { error: err.status ? err.message : 'internal error' }, { close: err.close });
       if (!err.status) console.error('[postit-board]', err);
     }
     return true;

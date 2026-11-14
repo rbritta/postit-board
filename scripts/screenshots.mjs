@@ -8,8 +8,12 @@ const server = await serve(0);
 const url = `http://127.0.0.1:${server.address().port}/demo/`;
 const browser = await chromium.launch({ channel: process.env.PW_CHANNEL || 'chrome' });
 
+/** Ends the transitions (the reader growing out of its note) so the picture shows where they land. */
+const settle = (page) => page.evaluate(() => { for (const a of document.getAnimations()) a.finish(); });
+
 async function shot(name, { width, height, scale = 2, before }) {
-  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale });
+  // due times are written in the browser's language: English for the README
+  const ctx = await browser.newContext({ viewport: { width, height }, deviceScaleFactor: scale, locale: 'en-US' });
   const page = await ctx.newPage();
   await page.goto(url);
   await page.waitForSelector('.pb-note');
@@ -27,6 +31,28 @@ await shot('editor', {
   before: async (page) => {
     await page.locator('.pb-note', { hasText: 'Curabitur' }).locator('[data-pb=edit]').click();
     await page.waitForTimeout(150);
+  },
+});
+await shot('menu', {
+  width: 1200, height: 900, scale: 1,
+  before: async (page) => {
+    const box = await page.locator('.pb-note', { hasText: 'Nam liber' }).boundingBox();
+    await page.mouse.click(box.x + 48, box.y + 150, { button: 'right' });
+  },
+});
+await shot('types', {
+  width: 1200, height: 900, scale: 1,
+  before: async (page) => {
+    await page.click('.pb-gear');
+    await page.mouse.move(1, 1);
+  },
+});
+await shot('reader', {
+  width: 1200, height: 820, scale: 1,
+  before: async (page) => {
+    await page.locator('.pb-note', { hasText: 'Vestibulum ante' }).click({ position: { x: 40, y: 40 } });
+    await page.mouse.move(1, 1);
+    await settle(page);
   },
 });
 
