@@ -6,6 +6,7 @@
   --pb-muted: #9aa4b2;
   --pb-fg: #e6edf3;
   --pb-accent: #68aff1;
+  --pb-accent-ink: #0d1117;
   --pb-danger: #f87171;
   --pb-radius: 14px;
   --pb-note-width: min(220px, 23%);
@@ -24,6 +25,7 @@
   --pb-fg: #1f2937;
   --pb-muted: #6b7280;
   --pb-accent: #1d4ed8;
+  --pb-accent-ink: #fff;
 }
 
 .pb-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
@@ -35,7 +37,7 @@
   background: rgba(127, 127, 127, 0.14); border: 1px solid var(--pb-glass-border); border-radius: 8px; padding: 7px 14px;
 }
 .pb-btn:hover { background: rgba(127, 127, 127, 0.24); }
-.pb-btn--primary { background: var(--pb-accent); border-color: transparent; color: #fff; }
+.pb-btn--primary { background: var(--pb-accent); border-color: transparent; color: var(--pb-accent-ink); font-weight: 600; }
 .pb-btn--danger { color: var(--pb-danger); }
 
 /* the board takes --pb-frame of the width (80% by default, people resize it), always centered */
@@ -120,7 +122,7 @@
 .pb-count { color: var(--pb-muted); font-variant-numeric: tabular-nums; }
 
 .pb-dialog {
-  width: min(520px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--pb-glass-border); border-radius: var(--pb-radius);
+  width: min(600px, calc(100vw - 32px)); padding: 0; border: 1px solid var(--pb-glass-border); border-radius: var(--pb-radius);
   background: #161b22; color: #e6edf3; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.5);
 }
 .pb[data-theme="light"] .pb-dialog { background: #fff; color: #1f2937; }
@@ -137,9 +139,12 @@
 .pb-reader-foot .pb-btn { background: rgba(0, 0, 0, 0.08); color: var(--pb-ink); border-color: rgba(0, 0, 0, 0.15); padding: 5px 12px; }
 .pb-reader-close { position: absolute; top: 4px; right: 8px; background: none; border: 0; font: 22px var(--pb-ui-font); color: rgba(0, 0, 0, 0.5); cursor: pointer; }
 .pb-reader-close:hover { color: #000; }
-.pb-expand { border: 0; padding: 0; margin: 4px 0 0; display: flex; flex-direction: column; gap: 6px; }
-.pb-expand legend { color: var(--pb-muted); margin-bottom: 4px; padding: 0; }
-.pb-expand label { display: flex; align-items: center; gap: 8px; cursor: pointer; }
+.pb-expand { border: 0; padding: 0; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 8px; }
+.pb-expand legend { color: var(--pb-fg); font-weight: 600; margin-bottom: 8px; padding: 0; }
+/* the options in the gear: the box or the dot on the left of its text, in one line (not the column of a form field) */
+.pb-form .pb-expand label, .pb-form label.pb-lock { flex-direction: row; align-items: center; gap: 10px; flex: none; margin: 0; color: var(--pb-fg); text-align: start; cursor: pointer; }
+.pb-form .pb-expand label { margin-left: 16px; }
+.pb-form input[type="radio"], .pb-form input[type="checkbox"] { width: 16px; height: 16px; margin: 0; padding: 0; flex: none; accent-color: var(--pb-accent); cursor: pointer; }
 .pb-form { display: flex; flex-direction: column; gap: 12px; padding: 18px; font: 14px var(--pb-ui-font); }
 .pb-form h2 { margin: 0 0 4px; font-size: 18px; }
 .pb-form label { display: flex; flex-direction: column; gap: 4px; flex: 1; min-width: 0; color: var(--pb-muted); }
@@ -204,8 +209,13 @@
 .pb-type input[type="color"] { width: 34px; height: 32px; padding: 2px; border-radius: 6px; cursor: pointer; }
 .pb-type input[type="color"]:disabled { cursor: not-allowed; opacity: 0.8; }
 .pb-type .pb-icon { color: inherit; background: rgba(127, 127, 127, 0.14); }
-.pb-lock { text-align: center; font-size: 13px; }
+.pb-settings .pb-types { padding-bottom: 14px; border-bottom: 1px solid var(--pb-glass-border); }
+/* the board size is another setting: its own section, under a divider like the one below the types */
+.pb-settings label.pb-lock { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
+.pb-settings .pb-actions { padding-top: 14px; border-top: 1px solid var(--pb-glass-border); }
+.pb-type .pb-lock { justify-content: center; margin: 0; font-size: 13px; cursor: default; }
 @media (max-width: 520px) {
+  .pb-types { gap: 16px; }
   .pb-type { grid-template-columns: 34px 1fr auto 28px; }
   .pb-type [name="description"] { grid-column: 1 / -1; grid-row: 2; }
 }

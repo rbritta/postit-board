@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.4.1 (2026-11-13)
+
+- The gear dialog looks right again: the "Long text" choices and "Lock the board size" sit on one line each, box or dot on the left, the "Long text" ones indented under their heading, under a divider below the types, and "Lock the board size" gets its own section under another divider, with one more above the buttons. The form-field rule had stacked them and centered them.
+- Save reads well in the dark theme (dark text on the accent, `--pb-accent-ink`), and the dialog is a little wider so the descriptions fit. On a phone the types are spaced apart.
+
 ## 0.4.0 (2026-11-13)
 
 - Read a cut note whole. By default a click opens it big in the center of the screen, with its link, Edit and Done. Esc or a click outside closes it, and the end of a drag never opens it.

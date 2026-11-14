@@ -1,4 +1,4 @@
-/*! postit-board v0.4.0 | MIT | https://github.com/rbritta/postit-board */
+/*! postit-board v0.4.1 | MIT | https://github.com/rbritta/postit-board */
 (function (global) {
 'use strict';
 /**
