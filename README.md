@@ -2,13 +2,15 @@
 
 A glass board of sticky notes for the home screen of your app: people drag notes around, your app pins its own (and takes them down when the problem is gone), and a color legend in the footer says what each color means. Notes people are done with go to Archived, and the board can split into lanes: a Kanban by state, or columns by category.
 
-Vanilla JS, zero runtime dependencies, about 165 kB unminified (48 kB gzipped, most of it comments), and it runs under a strict Content-Security-Policy. A SQLite store for Node comes with it.
+[![CI](https://github.com/rbritta/postit-board/actions/workflows/ci.yml/badge.svg)](https://github.com/rbritta/postit-board/actions/workflows/ci.yml) [![Release](https://img.shields.io/github/v/release/rbritta/postit-board)](https://github.com/rbritta/postit-board/releases) [![License: MIT](https://img.shields.io/github/license/rbritta/postit-board)](LICENSE) [![Live demo](https://img.shields.io/badge/demo-live-2ea043)](https://rbritta.github.io/postit-board/demo/)
 
 ![The board on a desktop](docs/board.png)
 
-**[Live demo](https://rbritta.github.io/postit-board/demo/)** ([Kanban](https://rbritta.github.io/postit-board/demo/kanban.html), [Categories](https://rbritta.github.io/postit-board/demo/categories.html), [Archived](https://rbritta.github.io/postit-board/demo/archived.html)) · [Use it](#use-it) · [Options](#options) · [Server](#server) · [For AI agents](AGENTS.md) · [Roadmap](TODO.md)
+**[Live demo](https://rbritta.github.io/postit-board/demo/)** ([Kanban](https://rbritta.github.io/postit-board/demo/kanban.html), [Categories](https://rbritta.github.io/postit-board/demo/categories.html), [Archived](https://rbritta.github.io/postit-board/demo/archived.html)) · [Install](#install) · [Quick start](#quick-start) · [Options](#options) · [Server](#server) · [For AI agents](AGENTS.md) · [Roadmap](TODO.md)
 
 ## What it does
+
+Vanilla JS, zero runtime dependencies, about 165 kB unminified (48 kB gzipped, most of it comments), and it runs under a strict Content-Security-Policy. A SQLite store for Node comes with it.
 
 - **Two kinds of notes.** Notes people write (edit ✎, archive ✓) and notes your app computes on every render. App notes have a folded corner, can't be edited or archived, and disappear when your app stops sending them. Their menu opens their link or dismisses them until your app says something new, and so does a drop on the box. Only their position (and that Dismiss) is stored. [More](#app-notes).
 - **Archive, with Undo.** The ✓, the menu or a drop on the Archive box takes a note off the board into Archived. A short "Archived · Undo" line stays at the bottom for 6 seconds. [More](#archive-and-archived).
@@ -52,11 +54,23 @@ Vanilla JS, zero runtime dependencies, about 165 kB unminified (48 kB gzipped, m
   <img src="docs/reader.png" alt="A note read whole in the center of the screen" width="380">
 </p>
 
-## Use it
+## Install
 
 ```sh
 npm install github:rbritta/postit-board
 ```
+
+No runtime dependencies. Pin a commit (`github:rbritta/postit-board#<commit>`) or a release tag for repeatable installs. The package exports `postit-board` (the browser API), `postit-board/core` (the rules with no DOM), `postit-board/server` (the SQLite store, the HTTP handler and the due watcher, Node 22.5+), `postit-board/style.css` and the classic bundle `postit-board/global`.
+
+No bundler and no modules? Use the classic build, which defines `window.PostitBoard`:
+
+```html
+<link rel="stylesheet" href="dist/postit-board.css">
+<script src="dist/postit-board.global.js"></script>
+<script>PostitBoard.createBoard(el, { store: PostitBoard.localStore('my-board') });</script>
+```
+
+## Quick start
 
 ```html
 <link rel="stylesheet" href="node_modules/postit-board/src/postit-board.css">
@@ -80,14 +94,6 @@ npm install github:rbritta/postit-board
   // later, when your data changes:
   board.update({ auto: computeAlerts() });
 </script>
-```
-
-No bundler and no modules? Use the classic build, which defines `window.PostitBoard`:
-
-```html
-<link rel="stylesheet" href="dist/postit-board.css">
-<script src="dist/postit-board.global.js"></script>
-<script>PostitBoard.createBoard(el, { store: PostitBoard.localStore('my-board') });</script>
 ```
 
 ## Options
@@ -266,17 +272,35 @@ Nothing is deleted: archived and removed notes keep their row with a timestamp. 
 
 A store of your own gets the same calls from the board: `archived()` returns `{ notes }` (or a plain list) of notes with `doneAt`; restore is `update(ref, { done: false })` and delete for good is `update(ref, { removed: true })`; Dismiss is `update({ key }, { dismissed })`, and `load()` returns it in `positions[key].dismissed` (with `dismissedAt`, which the board shows in Archived); `saveLanes(lanes)` keeps the lanes next to the legend and `load()` returns them as `lanes`.
 
+## Part of a small family
+
+Each works alone; together they need no glue code.
+
+| Project | What it does |
+| --- | --- |
+| [ai-signalbox](https://github.com/rbritta/ai-signalbox) | A coordination layer for several AI coding sessions on one machine: who is doing what, shared resources, asks and threads with the person. |
+| [ai-threads](https://github.com/rbritta/ai-threads) | Numbered threads between a person and one AI coding session, and the delivery of each message into it. |
+| [chat-thread](https://github.com/rbritta/chat-thread) | The conversation on screen: bubbles, ticks, threads and the message box. ai-threads' `view()` returns threads in the shape its `createThreads` takes. |
+| **postit-board** | A glass board of sticky notes for an app's home screen, with notes the app pins and takes down by itself. |
+| [claude-session-relay](https://github.com/rbritta/claude-session-relay) | Drive the Claude Code tabs of any VS Code window from a script, a bot or a web panel, through a plain file inbox. |
+
 ## Develop
 
 ```sh
-npm install          # only playwright-core, for the browser tests and screenshots
-npm test             # unit, server and browser tests (installed Chrome; set PW_CHANNEL=msedge for Edge)
-npm run demo         # http://localhost:5178/demo/ (and kanban.html, categories.html, archived.html)
-npm run build        # dist/ (commit it: script-tag users take it from the repo)
-npm run screenshots  # regenerates docs/*.png from the demo
+git clone https://github.com/rbritta/postit-board.git && cd postit-board
+npm ci                 # only playwright-core, for the browser tests and screenshots
+npm test               # unit, server and browser tests (an installed Chrome; PW_CHANNEL=msedge for Edge)
+npm run test:coverage  # the same, with a coverage summary of the DOM-free code
+npm run demo           # http://localhost:5178/demo/ (and kanban.html, categories.html, archived.html)
+npm run build          # dist/ (commit it: script-tag users take it from the repo)
+npm run screenshots    # regenerates docs/*.png from the demo
 ```
 
-Node 22.5 or newer (for `node:sqlite` in the tests). Issues and pull requests are welcome; keep it dependency-free.
+Node 22.5 or newer (for `node:sqlite` in the tests). 94 tests: 45 run in Node (the core, the server, the stores, the release notes) and 49 in a real browser, among them one per demo page. The browser tests pin the language, the time zone and the clock, so they give the same result on any machine; with no browser installed they skip and say why (CI makes that an error).
+
+## Contributing
+
+Issues and pull requests are welcome; keep it dependency-free. [CONTRIBUTING.md](CONTRIBUTING.md) has the setup, what a pull request needs and how releases are made, and [SECURITY.md](SECURITY.md) how to report a vulnerability privately. Everyone taking part follows the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 

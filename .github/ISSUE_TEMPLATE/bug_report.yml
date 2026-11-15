@@ -1,0 +1,42 @@
+name: Bug report
+description: Something does not work the way the README says it does.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please search the open issues first. A security problem goes through [SECURITY.md](https://github.com/rbritta/postit-board/blob/main/SECURITY.md), not here.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The postit-board version (package.json) or commit.
+      placeholder: 1.2.3 or a commit hash
+    validations:
+      required: true
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: How to reproduce
+      description: The smallest code or the steps that show it. Made-up data only.
+      render: js
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Browser and version, or Node version and OS for the server parts.
+      placeholder: Chrome 131 on Windows 11, or Node 24 on Ubuntu 24.04
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, console errors or logs. Remove secrets and personal data first.

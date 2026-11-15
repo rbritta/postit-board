@@ -1,6 +1,33 @@
 # Changelog
 
-## 0.7.0 (2026-11-14)
+All notable changes to this project are documented here. The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.7.1] - 2026-11-14
+
+Project housekeeping and a stricter demo: the library itself is unchanged.
+
+### Added
+
+- `CONTRIBUTING.md`, `SECURITY.md` (private vulnerability reporting), `CODE_OF_CONDUCT.md` (Contributor Covenant 2.1), issue forms, a pull request template and Dependabot for the actions and npm.
+- `release.yml`: a `v*` tag runs the tests and publishes a GitHub Release with that version's section of this file as its notes and the `npm pack` tarball attached. `scripts/release-notes.mjs` cuts the section and refuses a tag that is not the version in `package.json`.
+- `npm run test:coverage`: the tests with a coverage summary of the DOM-free code (`src/core.js`, `server/`).
+- A browser test loads each of the four demo pages and fails on any console error or Content-Security-Policy violation.
+
+### Changed
+
+- CI runs on Ubuntu and Windows with Node 22 and 24, with read-only permissions, cancels a run that a newer push replaces, checks that `dist/` is current and prints the coverage summary.
+- The browser tests share one launcher (`test/browser.js`) and always run in CI (`PW_REQUIRE=1`): there, a missing browser fails the run. Elsewhere they skip with the reason printed, instead of silently.
+- The browser tests pin the page's language (en-US), time zone (UTC) and clock, and Node's zone, so they give the same result on any machine.
+- The README follows the shape of its sibling repositories (badges, install, quick start, the family table).
+- This file follows Keep a Changelog.
+
+### Fixed
+
+- The demo pages ran an inline module script and declared no Content-Security-Policy, so the live demo did not show what the README promises. Each page now names its board in `<body data-demo>`, loads `demo.js` as a file and declares `default-src 'self'`.
+
+## [0.7.0] - 2026-11-14
 
 Archive and Archived, lanes (a Kanban by state, or columns by category), a richer right-click menu, board settings with tabs, and a phone that shows the urgent notes first. Everything is additive: a board that sets nothing looks and works as before, with Archived next to "+ Note" when the store can list archived notes.
 
@@ -51,7 +78,7 @@ Archive and Archived, lanes (a Kanban by state, or columns by category), a riche
 - CSS: new custom properties `--pb-done`, `--pb-accent-soft`, `--pb-line`, `--pb-lane-head`, `--pb-target`, `--pb-halo`, `--pb-sticky-top`, `--pb-title-only-lines`; state classes `pb-note--lifted`, `pb-note--landing`, `pb-note--title-only`; `pb-state` chips and the `pb-seg` filter in Archived. The container is named (`container: pb / inline-size`) and the dialog is one too (`pb-dialog`).
 - Demos: Kanban, Categories and Archived pages next to the board, reachable from each other, with a "Phone width" switch and the phone order and fold in their header. `npm run screenshots` makes the new images.
 
-## 0.5.0 (2026-11-13)
+## [0.5.0] - 2026-11-13
 
 Long text opens and closes with smooth transitions, in all three ways:
 
@@ -82,35 +109,35 @@ Fixes from a review of the whole library:
 
 New, all additive: CSS custom properties `--pb-motion-in`, `--pb-motion-out`, `--pb-link`, `--pb-link-hover`, `--pb-surface`, `--pb-surface-fg`; state classes `pb-note--closing`, `pb-note--reading`, `pb-dialog--closing` and the wrapper `pb-tools` around ✎ ✓.
 
-## 0.4.1 (2026-11-13)
+## [0.4.1] - 2026-11-13
 
 - The gear dialog looks right again: the "Long text" choices and "Lock the board size" sit on one line each, box or dot on the left, the "Long text" ones indented under their heading, under a divider below the types, and "Lock the board size" gets its own section under another divider, with one more above the buttons. The form-field rule had stacked them and centered them.
 - Save reads well in the dark theme (dark text on the accent, `--pb-accent-ink`), and the dialog is a little wider so the descriptions fit. On a phone the types are spaced apart.
 
-## 0.4.0 (2026-11-13)
+## [0.4.0] - 2026-11-13
 
 - Read a cut note whole. By default a click opens it big in the center of the screen, with its link, Edit and Done. Esc or a click outside closes it, and the end of a drag never opens it.
 - Two more ways, picked in the gear and saved with `store.saveView` (`PUT /view`): the note grows in place on hover (a tap on touch screens), or a "more" link appears on notes whose text is cut.
 - New: option `expand` (`'center'`, `'inplace'` or `'more'`), option `view`, `normalizeView`, `EXPAND`, `board.view` and `board.openNote(ref)`.
 
-## 0.3.0 (2026-11-13)
+## [0.3.0] - 2026-11-13
 
 - Resize the board from either bottom corner. It stays centered, keeps a minimum of 480 × 320 px and is saved with `store.saveSize` (`PUT /size`, `<table>_settings`, `localStore`). Double-click a corner to go back to the default.
 - By default the board takes 80% of the width (option `width`), leaving 10% on each side.
 - The gear has "Lock the board size", which hides the corners.
 - New: `normalizeSize`, `SIZE`, the `size` option (start with a saved size and skip a reload) and the `board.size` getter. Option `resizable: false` turns it off.
 
-## 0.2.2 (2026-11-13)
+## [0.2.2] - 2026-11-13
 
 - Wide screens get more columns: notes nobody placed flow into as many 220 px columns as fit (never fewer than four), and reflow when the window changes width.
 - The demo uses the whole width.
 
-## 0.2.1 (2026-11-13)
+## [0.2.1] - 2026-11-13
 
 - Smaller notes: long titles stop at 2 lines and long text at 4, ending in "…". The full text is in the tooltip and in Edit. Tune with `--pb-title-lines` / `--pb-text-lines` (`none` shows everything).
 - Minimum note height 180 → 140 px (120 px in the narrow list).
 
-## 0.2.0 (2026-11-13)
+## [0.2.0] - 2026-11-13
 
 - Right-click the glass: a menu of the note types (with their meanings) creates a note exactly where you clicked. Double-click lands there too now.
 - Right-click a written note: change its type, edit it or mark it done. App notes keep the browser menu; Shift + right-click always does.
@@ -118,10 +145,13 @@ New, all additive: CSS custom properties `--pb-motion-in`, `--pb-motion-out`, `-
 - The note touched last stays on top after a reload, also for app notes. Raising an app note no longer drops its position in `localStore`.
 - New helpers: `normalizeLegend`, `mergeLegend`, `legendColors`, `isHex`.
 
-## 0.1.0 (2026-11-13)
+## [0.1.0] - 2026-11-13
 
 First release, extracted from a home-lab dashboard where it ran as the home screen of a 3D printing app.
 
 - Board with written notes and app notes, color legend with filters, due times, images, links.
 - Grid layout on narrow screens, keyboard moving and editing.
 - `restStore`, `localStore`, SQLite store, HTTP handler and `watchDue` for Node.
+
+[Unreleased]: https://github.com/rbritta/postit-board/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/rbritta/postit-board/releases/tag/v0.7.1

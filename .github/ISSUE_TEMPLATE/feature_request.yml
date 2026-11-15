@@ -1,0 +1,27 @@
+name: Feature request
+description: An idea or a change that would make postit-board more useful.
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Please check the [roadmap](https://github.com/rbritta/postit-board/blob/main/TODO.md) and the open issues first; it may already be planned.
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What you are trying to do, and what gets in the way today.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: The proposal
+      description: What you would like to happen. An API sketch or an example helps.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other ways you considered, including what you do now.

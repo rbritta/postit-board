@@ -129,3 +129,6 @@ export function startDemo(name) {
   if (params.has('phone')) setPhone(true);
   return board;
 }
+
+// Each page names its board in <body data-demo>: no inline script, so the pages run under a strict CSP.
+if (document.body.dataset.demo) startDemo(document.body.dataset.demo);

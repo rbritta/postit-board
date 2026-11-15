@@ -1,24 +1,17 @@
 // The board in a real browser (installed Chrome or Edge, through playwright-core).
-// Skipped when no browser is found: set PW_CHANNEL=msedge or PW_EXECUTABLE=/path to pick one.
+// test/browser.js finds the browser, pins the language, time zone and clock, and says why when it skips.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { serve } from '../scripts/serve-demo.mjs';
+import { launch, newContext } from './browser.js';
 
-let chromium;
 let browser;
+let skip;
 let server;
 let base;
 
 before(async () => {
-  try {
-    ({ chromium } = await import('playwright-core'));
-    browser = await chromium.launch({
-      headless: true,
-      ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : { channel: process.env.PW_CHANNEL || 'chrome' }),
-    });
-  } catch {
-    browser = null;
-  }
+  ({ browser, skip } = await launch());
   server = await serve(0);
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -29,7 +22,7 @@ after(async () => {
 });
 
 async function page(width = 1200, { height = 900, ...context } = {}) {
-  const ctx = await browser.newContext({ viewport: { width, height }, locale: 'en-US', ...context });
+  const ctx = await newContext(browser, { viewport: { width, height }, locale: 'en-US', ...context });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -76,8 +69,28 @@ const SUB = '.pb-menu--sub';
 /** The keyframes of the first animation running on an element: `[{ height: '80px' }, …]`. */
 const keyframes = (locator) => locator.evaluate((el) => el.getAnimations()[0]?.effect.getKeyframes() ?? null);
 
+for (const name of ['index', 'kanban', 'categories', 'archived']) {
+  test(`the ${name} demo page loads under its strict Content-Security-Policy, with no errors in the console`, async (t) => {
+    if (!browser) return t.skip(skip);
+    const ctx = await newContext(browser, { viewport: { width: 1200, height: 900 } });
+    // every CSP violation lands in the errors, even one the console would not show
+    await ctx.addInitScript(() => document.addEventListener('securitypolicyviolation', (e) => console.error(`CSP: ${e.violatedDirective} ${e.blockedURI}`)));
+    const p = await ctx.newPage();
+    const errors = [];
+    p.on('pageerror', (e) => errors.push(e.message));
+    p.on('console', (m) => { if (m.type() === 'error') errors.push(m.text()); });
+    await p.goto(`${base}/demo/${name}.html`);
+    await p.waitForSelector(name === 'archived' ? '.pb-table tbody tr' : '.pb-note');
+    await p.waitForLoadState('networkidle');
+    assert.match(await p.getAttribute('meta[http-equiv="Content-Security-Policy"]', 'content'), /^default-src 'self'; script-src 'self'; style-src 'self'/);
+    assert.equal(await p.locator('script:not([src])').count(), 0, 'no inline script');
+    assert.deepEqual(errors, []);
+    await ctx.close();
+  });
+}
+
 test('renders notes, legend counts and due chips', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   assert.equal(await p.locator('.pb-note').count(), 8);
   assert.equal(await p.locator('.pb-note--auto').count(), 2);
@@ -96,7 +109,7 @@ test('renders notes, legend counts and due chips', async (t) => {
 });
 
 test('due times follow the browser\'s language, zone and clock unless the app sets locale, timeZone or hour12', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1200, { locale: 'en-GB' });
   await p.clock.setFixedTime(new Date(2026, 10, 13, 9, 0));
   const due = new Date(2026, 10, 20, 15, 30).toISOString();
@@ -115,7 +128,7 @@ test('due times follow the browser\'s language, zone and clock unless the app se
 });
 
 test('a legend item filters its color in and out, and keeps the keyboard focus', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx } = await page();
   await p.focus('.pb-key[data-color=yellow]');
   await p.keyboard.press('Enter');
@@ -128,7 +141,7 @@ test('a legend item filters its color in and out, and keeps the keyboard focus',
 });
 
 test('dragging saves the position, also for automatic notes', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx } = await page();
   for (const sel of ['.pb-note:not(.pb-note--auto) >> nth=0', '.pb-note--auto >> nth=0']) {
     const box = await p.locator(sel).boundingBox();
@@ -149,7 +162,7 @@ test('dragging saves the position, also for automatic notes', async (t) => {
 });
 
 test('create through the dialog, escape what was typed, then archive it', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx } = await page();
   await p.click('[data-pb=add]');
   await p.fill('.pb-dialog [name=title]', '<img src=x onerror="window.pwned=1">');
@@ -175,7 +188,7 @@ test('create through the dialog, escape what was typed, then archive it', async 
 });
 
 test('right-click on the glass: pick a type, the note starts exactly where you clicked', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   // the inside of the glass (inside its 1 px border), where notes are placed
   const glass = await p.locator('.pb-glass').evaluate((g) => { const r = g.getBoundingClientRect(); return { x: r.x + g.clientLeft, y: r.y + g.clientTop }; });
@@ -213,7 +226,7 @@ test('right-click on the glass: pick a type, the note starts exactly where you c
 });
 
 test('right-click on a note: Color ▸, Edit, then Archive last; Color opens on hover; an app note has Open and Dismiss only', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx } = await page();
   const note = p.locator('.pb-note:not(.pb-note--auto)').first();
   const ref = await note.getAttribute('data-ref');
@@ -240,7 +253,7 @@ test('right-click on a note: Color ▸, Edit, then Archive last; Color opens on 
 });
 
 test('the note touched last stays on top, also after a reload', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx } = await page();
   const notes = p.locator('.pb-note');
   const z = () => notes.evaluateAll((els) => els.map((el) => [el.dataset.ref, Number(el.style.getPropertyValue('--pb-z'))]));
@@ -260,7 +273,7 @@ test('the note touched last stays on top, also after a reload', async (t) => {
 });
 
 test('the gear edits the types: rename, recolor, add, remove; app types only rename', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await p.click('.pb-legend [data-pb=settings]');
   const rows = p.locator('.pb-dialog .pb-type');
@@ -290,7 +303,7 @@ test('the gear edits the types: rename, recolor, add, remove; app types only ren
 });
 
 test('a wide screen gets more columns; long text ends in an ellipsis with the full text in the tooltip', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1900);
   await mount(p, { notes: Array.from({ length: 10 }, (_, i) => ({ id: i + 1, title: `n${i}`, text: i ? 'short' : LONG })) });
   const columns = () => p.$$eval('#b .pb-note', (els) => new Set(els.map((e) => e.offsetLeft)).size);
@@ -306,7 +319,7 @@ test('a wide screen gets more columns; long text ends in an ellipsis with the fu
 });
 
 test('a board first drawn as a phone grid flows its notes into columns when the window gets wide', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(600);
   await mount(p, { notes: Array.from({ length: 8 }, (_, i) => ({ id: i + 1, title: `n${i}`, text: i % 2 ? LONG.slice(0, 120) : 'short' })) });
   assert.equal(await p.locator('.pb-glass').evaluate((el) => getComputedStyle(el).display), 'grid');
@@ -321,7 +334,7 @@ test('a board first drawn as a phone grid flows its notes into columns when the 
 });
 
 test('the bottom corners resize the board, centered and saved; double-click resets; the gear locks it', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1400);
   const box = () => p.$eval('.pb-stage', (e) => { const r = e.getBoundingClientRect(); const a = e.closest('.pb').getBoundingClientRect(); return { w: Math.round(r.width), left: Math.round(r.left - a.left), right: Math.round(a.right - r.right), h: Math.round(e.querySelector('.pb-glass').getBoundingClientRect().height), avail: Math.round(a.width) }; });
   const b0 = await box();
@@ -363,7 +376,7 @@ test('the bottom corners resize the board, centered and saved; double-click rese
 });
 
 test('cut text: a click opens it whole in the center; the gear switches to "more" or to growing in place', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1400);
   await mount(p, {
     store: 't-expand', legend: [{ color: 'yellow', label: 'Notes' }],
@@ -411,7 +424,7 @@ test('cut text: a click opens it whole in the center; the gear switches to "more
 });
 
 test('center: the reader grows out of its note, the backdrop fades in, and Esc plays it back into the note', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { motion: '10s', notes: [{ id: 1, title: 'Long one', text: LONG }, { id: 2, title: 'Short', text: 'ok' }] });
   await p.mouse.move(1, 1);
@@ -465,7 +478,7 @@ test('center: the reader grows out of its note, the backdrop fades in, and Esc p
 });
 
 test('center: ×, a click outside and Done play it back too; a note off screen or gone fades instead', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1200, { height: 700 });
   const notes = [{ id: 1, title: 'First', text: LONG, x: 0.05, y: 30 }, { id: 2, title: 'Second', text: 'two', x: 0.5, y: 30 }, { id: 3, title: 'Far below', text: 'three', x: 0.05, y: 1500 }];
   await mount(p, { motion: '10s', store: 't-reader', notes });
@@ -523,7 +536,7 @@ test('center: ×, a click outside and Done play it back too; a note off screen o
 });
 
 test('in place: a cut note grows with a height animation on hover or keyboard focus, and shrinks back', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { motion: '10s', view: { expand: 'inplace' }, notes: [{ id: 1, title: 'Long one', text: LONG, x: 0.05, y: 30 }, { id: 2, title: 'Short', text: 'ok', x: 0.5, y: 30 }] });
   const note = p.locator('[data-ref="id:1"]');
@@ -566,7 +579,7 @@ test('in place: a cut note grows with a height animation on hover or keyboard fo
 });
 
 test('more: the link reveals the rest with a height animation and "less" rolls it back', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { motion: '10s', view: { expand: 'more' }, notes: [{ id: 1, title: 'Long one', text: LONG, x: 0.05, y: 30 }, { id: 2, title: 'Short', text: 'ok', x: 0.5, y: 30 }] });
   const note = p.locator('[data-ref="id:1"]');
@@ -590,7 +603,7 @@ test('more: the link reveals the rest with a height animation and "less" rolls i
 });
 
 test('reduced motion: the three ways change at once, without animations', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1200, { reducedMotion: 'reduce' });
   await mount(p, { view: { expand: 'inplace' }, notes: [{ id: 1, title: 'Long one', text: LONG, x: 0.05, y: 30 }] });
   const note = p.locator('[data-ref="id:1"]');
@@ -613,7 +626,7 @@ test('reduced motion: the three ways change at once, without animations', async 
 });
 
 test('a drag never opens the notes it passes over, nor makes them animate', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { motion: '10s', view: { expand: 'inplace' }, notes: [{ id: 1, title: 'Moving', text: LONG, x: 0.05, y: 30 }, { id: 2, title: 'In the way', text: LONG, x: 0.4, y: 30 }] });
   const a = await p.locator('[data-ref="id:1"]').boundingBox();
@@ -630,7 +643,7 @@ test('a drag never opens the notes it passes over, nor makes them animate', asyn
 });
 
 test('a drag lands under the pointer on a scrolled board, and data sent during it shows up when it ends', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   const notes = Array.from({ length: 8 }, (_, i) => ({ id: i + 1, title: `n${i}`, text: 'x', x: 0.05, y: 30 + i * 200 }));
   await mount(p, { store: 't-scroll', size: { height: 400 }, notes });
@@ -659,7 +672,7 @@ test('a drag lands under the pointer on a scrolled board, and data sent during i
 });
 
 test('keyboard: arrows move notes and every move is saved; Enter, Esc and the menu give the focus back', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { store: 't-keys', notes: [{ title: 'A', text: 'a', x: 0.1, y: 40 }, { title: 'B', text: 'b', x: 0.5, y: 40 }] });
   await p.focus('[data-ref="id:1"]');
@@ -701,7 +714,7 @@ test('keyboard: arrows move notes and every move is saved; Enter, Esc and the me
 });
 
 test('when the store fails, a note marked done or deleted comes back and postit-error fires', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await p.evaluate(async () => {
     document.body.innerHTML = '<div id="b"></div>';
@@ -726,8 +739,8 @@ test('when the store fails, a note marked done or deleted comes back and postit-
 });
 
 test('works under a strict Content-Security-Policy: no inline styles, no inline handlers, no eval', async (t) => {
-  if (!browser) return t.skip('no browser');
-  const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 }, locale: 'en-US' });
+  if (!browser) return t.skip(skip);
+  const ctx = await newContext(browser, { viewport: { width: 1200, height: 900 }, locale: 'en-US' });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -767,7 +780,7 @@ test('works under a strict Content-Security-Policy: no inline styles, no inline 
 });
 
 test('configure() changes strings, size and view after mounting; destroy() leaves the element clean', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1400);
   await mount(p, { notes: [{ id: 1, title: 'One', text: 'one' }] });
   await p.evaluate(() => window.B.configure({ strings: { add: '+ Add one', hint: 'Move the notes freely' }, view: { expand: 'more' }, size: { width: 0.5 } }));
@@ -789,8 +802,8 @@ test('configure() changes strings, size and view after mounting; destroy() leave
 });
 
 test('due chips turn from today to overdue in place, without redrawing the board', async (t) => {
-  if (!browser) return t.skip('no browser');
-  const ctx = await browser.newContext({ viewport: { width: 1200, height: 900 }, locale: 'en-US' });
+  if (!browser) return t.skip(skip);
+  const ctx = await newContext(browser, { viewport: { width: 1200, height: 900 }, locale: 'en-US' });
   const p = await ctx.newPage();
   await p.clock.install({ time: new Date(2026, 10, 13, 15, 0) });
   await p.goto(`${base}/demo/`);
@@ -806,7 +819,7 @@ test('due chips turn from today to overdue in place, without redrawing the board
 });
 
 test('a note made on a phone reaches the store without a position (no x or y sent as null)', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(360, { height: 740 });
   await p.evaluate(async () => {
     document.body.innerHTML = '<div id="b"></div>';
@@ -829,7 +842,7 @@ test('a note made on a phone reaches the store without a position (no x or y sen
 });
 
 test('on a phone the board is a grid without horizontal scroll, and every dialog fits', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(360, { height: 740 });
   assert.equal(await p.locator('.pb-glass').evaluate((el) => getComputedStyle(el).display), 'grid');
   const fits = () => p.evaluate(() => {
@@ -863,8 +876,8 @@ test('on a phone the board is a grid without horizontal scroll, and every dialog
 });
 
 test('the global build exposes the same API to a classic script', async (t) => {
-  if (!browser) return t.skip('no browser');
-  const ctx = await browser.newContext();
+  if (!browser) return t.skip(skip);
+  const ctx = await newContext(browser, );
   const p = await ctx.newPage();
   await p.goto(`${base}/demo/`);
   await p.addScriptTag({ url: `${base}/dist/postit-board.global.js` });

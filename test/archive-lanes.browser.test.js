@@ -1,24 +1,18 @@
 // Archive, Archived, lanes, the menu, the board settings, the phone, app notes (Open, Dismiss), the lifted drag,
 // a title alone and the editor's first field (0.7.0), in a real browser.
-// Skipped when no browser is found: set PW_CHANNEL=msedge or PW_EXECUTABLE=/path to pick one.
+// test/browser.js finds the browser, pins the language, time zone and clock, and says why when it skips.
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { serve } from '../scripts/serve-demo.mjs';
+import { launch, newContext } from './browser.js';
 
 let browser;
+let skip;
 let server;
 let base;
 
 before(async () => {
-  try {
-    const { chromium } = await import('playwright-core');
-    browser = await chromium.launch({
-      headless: true,
-      ...(process.env.PW_EXECUTABLE ? { executablePath: process.env.PW_EXECUTABLE } : { channel: process.env.PW_CHANNEL || 'chrome' }),
-    });
-  } catch {
-    browser = null;
-  }
+  ({ browser, skip } = await launch());
   server = await serve(0);
   base = `http://127.0.0.1:${server.address().port}`;
 });
@@ -40,7 +34,7 @@ const near = (a, b, tolerance = 2) => Math.abs(a - b) <= tolerance;
 const intersects = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
 
 async function page(width = 1200, { height = 900, ...context } = {}) {
-  const ctx = await browser.newContext({ viewport: { width, height }, locale: 'en-US', ...context });
+  const ctx = await newContext(browser, { viewport: { width, height }, locale: 'en-US', ...context });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -123,7 +117,7 @@ const astride = (box, inner, side) => (side === 'left'
   : box.r > inner.r && box.l < inner.r && inner.r - box.l <= box.w / 3 + 1);
 
 test('the Archive box sits astride the glass edge beside the note; only the pointer on it archives; Undo puts the note back', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1600);
   await mount(p, {
     store: 't-box', size: { width: 0.6 }, legend: LEGEND,
@@ -203,7 +197,7 @@ test('the Archive box sits astride the glass edge beside the note; only the poin
 });
 
 test('the ✓ and the menu archive too; app notes are never archived (their box dismisses); a store without archived() has no Archived button', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, {
     store: 't-done', legend: LEGEND,
@@ -249,7 +243,7 @@ test('the ✓ and the menu archive too; app notes are never archived (their box 
 });
 
 test('Archived: the table lists, filters and counts; Restore goes back to the lane; Delete for good asks first', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await p.clock.setFixedTime(new Date(2026, 10, 13, 18, 0));
   await mount(p, {
@@ -317,7 +311,7 @@ test('Archived: the table lists, filters and counts; Restore goes back to the la
 });
 
 test('lanes: off by default; a drag to another lane changes the state, never over the header, which sticks and stays on top', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1200, { height: 600 });
   await mount(p, { notes: [{ id: 1, title: 'Free', text: 'x' }] });
   assert.equal(await p.evaluate(() => window.B.lanes.mode), 'off');
@@ -374,7 +368,7 @@ test('lanes: off by default; a drag to another lane changes the state, never ove
 });
 
 test('the menu with lanes: State ▸ first, with the lane; picking one moves the note; the glass menu says the lane', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { store: 't-menu', legend: LEGEND, lanes: { mode: 'states' }, notes: [{ title: 'Beta', text: 'b', lane: { states: 'doing' } }] });
   await note(p, 'Beta').click({ button: 'right', position: { x: 40, y: 60 } });
@@ -411,7 +405,7 @@ test('the menu with lanes: State ▸ first, with the lane; picking one moves the
 });
 
 test('Board settings: tabs Types · Lanes · View; lanes edited, a removed lane hands its notes on; saved in the store', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { store: 't-set', legend: LEGEND, notes: [{ title: 'In waiting', text: 'w', lane: { states: 'waiting' } }, { title: 'In doing', text: 'd', lane: { states: 'doing' } }] });
   await p.click('.pb-gear');
@@ -473,7 +467,7 @@ test('Board settings: tabs Types · Lanes · View; lanes edited, a removed lane 
 });
 
 test('on a phone: lanes are sections that fold, a long press opens the menu as a sheet, the box sinks over the note, archived notes are cards', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(360, { height: 760, hasTouch: true, isMobile: true });
   await mount(p, {
     store: 't-phone', legend: LEGEND, lanes: { mode: 'states' },
@@ -527,7 +521,7 @@ test('on a phone: lanes are sections that fold, a long press opens the menu as a
 });
 
 test('narrow screens: narrowOrder puts the urgent first, narrowLimit folds the rest behind "Show N more"; a desktop is untouched', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(360, { height: 760 });
   await p.clock.setFixedTime(new Date(2026, 10, 13, 9, 0));
   const notes = [
@@ -578,7 +572,7 @@ test('narrow screens: narrowOrder puts the urgent first, narrowLimit folds the r
 });
 
 test('reduced motion: archiving, the box and the toast change at once', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1600, { reducedMotion: 'reduce' });
   await mount(p, { store: 't-still', size: { width: 0.6 }, legend: LEGEND, notes: [{ title: 'One', text: '1', x: 0.05, y: 40 }, { title: 'Two', text: '2', x: 0.5, y: 40 }] });
   await note(p, 'One').locator('[data-pb=done]').click();
@@ -597,8 +591,8 @@ test('reduced motion: archiving, the box and the toast change at once', async (t
 });
 
 test('under a strict Content-Security-Policy too: the Archive box, Archived, lanes and the settings', async (t) => {
-  if (!browser) return t.skip('no browser');
-  const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, locale: 'en-US' });
+  if (!browser) return t.skip(skip);
+  const ctx = await newContext(browser, { viewport: { width: 1600, height: 900 }, locale: 'en-US' });
   const p = await ctx.newPage();
   const errors = [];
   p.on('pageerror', (e) => errors.push(e.message));
@@ -654,7 +648,7 @@ const APP = [
 const POS = { disk: { x: 0.4, y: 40 }, plain: { x: 0.7, y: 40 } };
 
 test('app notes: Open → and Dismiss in the menu; Dismiss hides one until the app changes it; Undo; Bring back in Archived', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   await mount(p, { store: 't-dismiss', legend: LEGEND, notes: [{ title: 'Mine', text: 'm', x: 0.05, y: 40 }], auto: APP, positions: POS });
   // without a link: Dismiss only, with its hint; with a link: Open →, a line, then Dismiss
@@ -726,7 +720,7 @@ test('app notes: Open → and Dismiss in the menu; Dismiss hides one until the a
 });
 
 test('app notes on a phone: a long press opens Open → and Dismiss as a sheet', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(360, { height: 760, hasTouch: true, isMobile: true });
   await mount(p, { store: 't-dismiss-phone', legend: LEGEND, auto: APP });
   await longPress(p, note(p, 'Disk at 91%'));
@@ -744,7 +738,7 @@ test('app notes on a phone: a long press opens Open → and Dismiss as a sheet',
 /* ---------- the lifted note ---------- */
 
 test('a dragged note is lifted out of the glass: visible outside it mid-drag, back inside after a drop elsewhere; at once with reduced motion', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1600);
   await mount(p, { store: 't-lift', size: { width: 0.6 }, legend: LEGEND, notes: [{ title: 'Traveler', text: 't', x: 0.3, y: 60 }] });
   const inner = await glassInner(p);
@@ -798,7 +792,7 @@ test('a dragged note is lifted out of the glass: visible outside it mid-drag, ba
 /* ---------- a title alone ---------- */
 
 test('a note with only a title shows it in the middle of the note, up to 4 lines; with text it stays on top', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   const long = 'Call the plumber about the kitchen sink before the weekend starts please';
   const notes = [
@@ -838,7 +832,7 @@ test('a note with only a title shows it in the middle of the note, up to 4 lines
 /* ---------- the editor starts on the title ---------- */
 
 test('the editor starts on the title: "+ Note", "New note here", a lane, Edit (cursor at the end), and on a phone', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   const onTitle = () => p.evaluate(() => {
     const el = document.activeElement;
@@ -885,7 +879,7 @@ test('the editor starts on the title: "+ Note", "New note here", a lane, Edit (c
 });
 
 test('an app note dragged to the box is dismissed: the same box, its own words; a drop elsewhere moves it; archiveBox off hides the box for both', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page(1600);
   await mount(p, {
     store: 't-drag-dismiss', size: { width: 0.6 }, legend: LEGEND,
@@ -940,7 +934,7 @@ test('an app note dragged to the box is dismissed: the same box, its own words; 
 });
 
 test('Archived: Archived and Dismissed chips with their dates, the last first; All · Archived · Dismissed; a chip on each phone card', async (t) => {
-  if (!browser) return t.skip('no browser');
+  if (!browser) return t.skip(skip);
   const { p, ctx, errors } = await page();
   const at = (h) => new Date(2026, 10, 14, h, 0);
   await p.clock.setFixedTime(at(9));

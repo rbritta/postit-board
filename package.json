@@ -1,6 +1,6 @@
 {
   "name": "postit-board",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "A glass board of draggable sticky notes with a color legend, due times and app-generated notes. Zero dependencies, vanilla JS, with a SQLite store for Node.",
   "keywords": ["sticky-notes", "post-it", "kanban", "board", "dashboard", "vanilla-js", "sqlite", "no-dependencies"],
   "homepage": "https://github.com/rbritta/postit-board",
@@ -23,6 +23,7 @@
   "scripts": {
     "build": "node scripts/build.mjs",
     "test": "node --test \"test/*.test.js\"",
+    "test:coverage": "node --test --experimental-test-coverage --test-coverage-include=src/core.js --test-coverage-include=\"server/**\" --test-coverage-include=scripts/release-notes.mjs \"test/*.test.js\"",
     "demo": "node scripts/serve-demo.mjs",
     "screenshots": "node scripts/screenshots.mjs",
     "prepublishOnly": "npm run build && npm test"

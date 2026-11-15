@@ -1,0 +1,34 @@
+name: Release
+on:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+concurrency:
+  group: release-${{ github.ref }}
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      PW_REQUIRE: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Notes from CHANGELOG.md (the tag must be the version in package.json)
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME" > "$RUNNER_TEMP/notes.md"
+      - name: dist/ is current
+        run: npm run build && git diff --exit-code -- dist/
+      - run: npm test
+      - name: Package
+        run: npm pack --pack-destination "$RUNNER_TEMP"
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          gh release create "$GITHUB_REF_NAME" "$RUNNER_TEMP"/*.tgz
+          --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/notes.md" --verify-tag
+          ${{ contains(github.ref_name, '-') && '--prerelease' || '' }}

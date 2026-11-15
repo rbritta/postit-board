@@ -1,2 +1,8 @@
 * text=auto eol=lf
+
+# binary assets
 *.png binary
+*.jpg binary
+*.gif binary
+*.ico binary
+*.tgz binary
