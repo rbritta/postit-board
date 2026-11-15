@@ -20,7 +20,7 @@ jobs:
       # the browser tests use the runner's Chrome; without one they fail here instead of skipping
       PW_REQUIRE: '1'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
