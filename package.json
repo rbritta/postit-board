@@ -29,6 +29,6 @@
     "prepublishOnly": "npm run build && npm test"
   },
   "devDependencies": {
-    "playwright-core": "^1.48.0"
+    "playwright-core": "^1.65.1"
   }
 }
